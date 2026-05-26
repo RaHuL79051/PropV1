@@ -32,6 +32,11 @@ export default function TenantsPage() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isAlertPopupOpen, setIsAlertPopupOpen] = useState(false);
 
+  // Delete Tenant confirmation states
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deleteTenantId, setDeleteTenantId] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+
   // Step-based registration wizard
   const [wizardStep, setWizardStep] = useState(1);
   const [aadhaarVerifying, setAadhaarVerifying] = useState(false);
@@ -165,7 +170,12 @@ export default function TenantsPage() {
       setInviteUrl(res.data.invite.inviteUrl);
       showToast('Invitation link sent successfully', 'success');
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to send invitation link', 'error');
+      if (err.response?.data?.errors && Array.isArray(err.response.data.errors)) {
+        const details = err.response.data.errors.map((e: any) => `${e.field.replace('body.', '')}: ${e.message}`).join(', ');
+        showToast(`Validation failed: ${details}`, 'error');
+      } else {
+        showToast(err.response?.data?.message || 'Failed to send invitation link', 'error');
+      }
     } finally {
       setInviteSending(false);
     }
@@ -234,7 +244,12 @@ export default function TenantsPage() {
       setIsProfileModalOpen(false);
       fetchTenants();
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to update tenant profile', 'error');
+      if (err.response?.data?.errors && Array.isArray(err.response.data.errors)) {
+        const details = err.response.data.errors.map((e: any) => `${e.field.replace('body.', '')}: ${e.message}`).join(', ');
+        showToast(`Validation failed: ${details}`, 'error');
+      } else {
+        showToast(err.response?.data?.message || 'Failed to update tenant profile', 'error');
+      }
     } finally {
       setEditSubmitting(false);
     }
@@ -437,7 +452,12 @@ export default function TenantsPage() {
       fetchBillingStatus();
       fetchPayments();
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to register tenant', 'error');
+      if (err.response?.data?.errors && Array.isArray(err.response.data.errors)) {
+        const details = err.response.data.errors.map((e: any) => `${e.field.replace('body.', '')}: ${e.message}`).join(', ');
+        showToast(`Validation failed: ${details}`, 'error');
+      } else {
+        showToast(err.response?.data?.message || 'Failed to register tenant', 'error');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -567,17 +587,26 @@ export default function TenantsPage() {
     }
   };
 
-  const handleDeleteTenant = async (id: string) => {
-    if (!confirm('Are you sure you want to remove this tenant? This will also vacate their assigned bed space.')) return;
+  const triggerDeleteTenant = (id: string) => {
+    setDeleteTenantId(id);
+    setIsDeleteModalOpen(true);
+  };
 
+  const handleDeleteTenant = async () => {
+    if (!deleteTenantId) return;
+    setIsDeleting(true);
     try {
-      await api.delete(`/tenants/${id}`);
+      await api.delete(`/tenants/${deleteTenantId}`);
       showToast('Tenant removed successfully', 'success');
+      setIsDeleteModalOpen(false);
+      setDeleteTenantId('');
       fetchTenants();
       fetchBillingStatus();
       fetchPayments();
     } catch (err: any) {
       showToast(err.response?.data?.message || 'Failed to remove tenant', 'error');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -900,7 +929,7 @@ export default function TenantsPage() {
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    handleDeleteTenant(tenant._id);
+                                    triggerDeleteTenant(tenant._id);
                                   }}
                                   className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-500/10 transition-colors"
                                   title="Remove Tenant"
@@ -1051,7 +1080,7 @@ export default function TenantsPage() {
                             </button>
                           )}
                           <button
-                            onClick={() => handleDeleteTenant(tenant._id)}
+                            onClick={() => triggerDeleteTenant(tenant._id)}
                             className="p-1.5 border border-slate-200 dark:border-slate-800 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-lg transition-all"
                             title="Delete Tenant"
                           >
@@ -2112,6 +2141,62 @@ export default function TenantsPage() {
               >
                 Cancel
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-md shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
+            <div className="flex justify-between items-center p-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
+              <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-rose-500" />
+                Remove Tenant
+              </h3>
+              <button
+                onClick={() => {
+                  setIsDeleteModalOpen(false);
+                  setDeleteTenantId('');
+                }}
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5 flex-1">
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
+                Are you sure you want to remove this tenant? This will also vacate their assigned bed space.
+              </p>
+              
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsDeleteModalOpen(false);
+                    setDeleteTenantId('');
+                  }}
+                  className="px-4 py-2 text-sm font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteTenant}
+                  disabled={isDeleting}
+                  className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white text-sm font-bold rounded-xl shadow-md shadow-rose-500/20 disabled:opacity-50 transition-all flex items-center gap-2"
+                >
+                  {isDeleting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Removing...
+                    </>
+                  ) : (
+                    'Remove'
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>

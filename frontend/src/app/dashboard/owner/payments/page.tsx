@@ -85,6 +85,11 @@ function PaymentsContent() {
   const [expenseDescription, setExpenseDescription] = useState('');
   const [isAddExpenseModalOpen, setIsAddExpenseModalOpen] = useState(false);
 
+  // Delete Expense confirmation states
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deleteExpenseId, setDeleteExpenseId] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const fetchPaymentsAndTenants = async () => {
     setIsLoading(true);
     try {
@@ -226,14 +231,24 @@ function PaymentsContent() {
     }
   };
 
-  const handleDeleteExpense = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this expense entry?')) return;
+  const triggerDeleteExpense = (id: string) => {
+    setDeleteExpenseId(id);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleDeleteExpense = async () => {
+    if (!deleteExpenseId) return;
+    setIsDeleting(true);
     try {
-      await api.delete(`/expenses/${id}`);
+      await api.delete(`/expenses/${deleteExpenseId}`);
       showToast('Expense deleted successfully', 'info');
+      setIsDeleteModalOpen(false);
+      setDeleteExpenseId('');
       fetchExpenses();
     } catch (err: any) {
       showToast(err.response?.data?.message || 'Failed to delete expense', 'error');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -665,7 +680,7 @@ function PaymentsContent() {
                         </td>
                         <td className="px-6 py-3.5 text-center">
                           <button
-                            onClick={() => handleDeleteExpense(expense._id)}
+                            onClick={() => triggerDeleteExpense(expense._id)}
                             className="p-1.5 border border-slate-200 dark:border-slate-800 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-lg transition-all"
                             title="Delete log entry"
                           >
@@ -701,7 +716,7 @@ function PaymentsContent() {
                             ₹{expense.amount.toLocaleString('en-IN')}
                           </span>
                           <button
-                            onClick={() => handleDeleteExpense(expense._id)}
+                            onClick={() => triggerDeleteExpense(expense._id)}
                             className="mt-1.5 text-[10px] text-rose-500 font-bold hover:underline inline-flex items-center gap-1"
                           >
                             <Trash2 className="w-3.5 h-3.5" /> Remove
@@ -928,6 +943,62 @@ function PaymentsContent() {
                 {isExpenseSubmitting ? 'Logging Outlay...' : 'Save Expense'}
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-md shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
+            <div className="flex justify-between items-center p-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
+              <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-rose-500" />
+                Delete Expense Entry
+              </h3>
+              <button
+                onClick={() => {
+                  setIsDeleteModalOpen(false);
+                  setDeleteExpenseId('');
+                }}
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5">
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
+                Are you sure you want to delete this expense entry? This action is permanent and cannot be undone.
+              </p>
+              
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsDeleteModalOpen(false);
+                    setDeleteExpenseId('');
+                  }}
+                  className="px-4 py-2 text-sm font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteExpense}
+                  disabled={isDeleting}
+                  className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white text-sm font-bold rounded-xl shadow-md shadow-rose-500/20 disabled:opacity-50 transition-all flex items-center gap-2"
+                >
+                  {isDeleting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Deleting...
+                    </>
+                  ) : (
+                    'Delete'
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

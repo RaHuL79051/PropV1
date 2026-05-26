@@ -235,7 +235,12 @@ export default function PropertiesPage() {
       }
       fetchBillingStatus();
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to register tenant', 'error');
+      if (err.response?.data?.errors && Array.isArray(err.response.data.errors)) {
+        const details = err.response.data.errors.map((e: any) => `${e.field.replace('body.', '')}: ${e.message}`).join(', ');
+        showToast(`Validation failed: ${details}`, 'error');
+      } else {
+        showToast(err.response?.data?.message || 'Failed to register tenant', 'error');
+      }
     } finally {
       setAssignSubmitting(false);
     }
@@ -263,7 +268,12 @@ export default function PropertiesPage() {
       setAssignInviteUrl(res.data.invite.inviteUrl);
       showToast('Invitation link sent successfully', 'success');
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to send invitation link', 'error');
+      if (err.response?.data?.errors && Array.isArray(err.response.data.errors)) {
+        const details = err.response.data.errors.map((e: any) => `${e.field.replace('body.', '')}: ${e.message}`).join(', ');
+        showToast(`Validation failed: ${details}`, 'error');
+      } else {
+        showToast(err.response?.data?.message || 'Failed to send invitation link', 'error');
+      }
     } finally {
       setAssignInviteSending(false);
     }

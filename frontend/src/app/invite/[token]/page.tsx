@@ -70,7 +70,12 @@ export default function TenantInvitePage() {
       setAccepted(true);
       showToast('Your profile has been linked successfully', 'success');
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to complete invitation', 'error');
+      if (err.response?.data?.errors && Array.isArray(err.response.data.errors)) {
+        const details = err.response.data.errors.map((e: any) => `${e.field.replace('body.', '')}: ${e.message}`).join(', ');
+        showToast(`Validation failed: ${details}`, 'error');
+      } else {
+        showToast(err.response?.data?.message || 'Failed to complete invitation', 'error');
+      }
     } finally {
       setSubmitting(false);
     }

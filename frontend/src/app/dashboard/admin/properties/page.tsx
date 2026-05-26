@@ -204,7 +204,12 @@ export default function AdminPropertiesPage() {
         fetchRoomsForProperty(selectedProperty._id);
       }
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to register tenant', 'error');
+      if (err.response?.data?.errors && Array.isArray(err.response.data.errors)) {
+        const details = err.response.data.errors.map((e: any) => `${e.field.replace('body.', '')}: ${e.message}`).join(', ');
+        showToast(`Validation failed: ${details}`, 'error');
+      } else {
+        showToast(err.response?.data?.message || 'Failed to register tenant', 'error');
+      }
     } finally {
       setAssignSubmitting(false);
     }
@@ -234,7 +239,12 @@ export default function AdminPropertiesPage() {
       setAssignInviteUrl(res.data.invite.inviteUrl);
       showToast('Invitation link sent successfully', 'success');
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to send invitation link', 'error');
+      if (err.response?.data?.errors && Array.isArray(err.response.data.errors)) {
+        const details = err.response.data.errors.map((e: any) => `${e.field.replace('body.', '')}: ${e.message}`).join(', ');
+        showToast(`Validation failed: ${details}`, 'error');
+      } else {
+        showToast(err.response?.data?.message || 'Failed to send invitation link', 'error');
+      }
     } finally {
       setAssignInviteSending(false);
     }
@@ -293,6 +303,15 @@ export default function AdminPropertiesPage() {
   const [allPayments, setAllPayments] = useState<any[]>([]);
   const [loadingPayments, setLoadingPayments] = useState(false);
   const [uploadingDoc, setUploadingDoc] = useState<'aadhaar' | 'agreement' | 'photo' | null>(null);
+
+  // Delete confirmation states
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deleteType, setDeleteType] = useState<'property' | 'room' | null>(null);
+  const [deleteItemId, setDeleteItemId] = useState('');
+  const [deleteItemExtraId, setDeleteItemExtraId] = useState('');
+  const [deleteConfirmTitle, setDeleteConfirmTitle] = useState('');
+  const [deleteConfirmMessage, setDeleteConfirmMessage] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const fetchProperties = async () => {
     try {
@@ -435,8 +454,16 @@ export default function AdminPropertiesPage() {
     }
   };
 
+  const triggerDeleteRoom = (roomId: string, propId: string) => {
+    setDeleteType('room');
+    setDeleteItemId(roomId);
+    setDeleteItemExtraId(propId);
+    setDeleteConfirmTitle('Delete Room');
+    setDeleteConfirmMessage('Are you sure you want to delete this room and all its beds? This action is permanent and cannot be undone.');
+    setIsDeleteModalOpen(true);
+  };
+
   const handleDeleteRoom = async (roomId: string, propId: string) => {
-    if (!confirm('Delete this room and all its beds?')) return;
     try {
       await api.delete(`/properties/rooms/${roomId}`);
       showToast('Room deleted', 'success');
@@ -522,14 +549,50 @@ export default function AdminPropertiesPage() {
     }
   };
 
+  const triggerDeleteProperty = (id: string) => {
+    setDeleteType('property');
+    setDeleteItemId(id);
+    setDeleteConfirmTitle('Delete Property');
+    setDeleteConfirmMessage('Are you sure you want to delete this property and all associated rooms/beds? This action is permanent and cannot be undone.');
+    setIsDeleteModalOpen(true);
+  };
+
   const handleDeleteProperty = async (id: string) => {
-    if (!confirm('Delete this property and all associated rooms/beds?')) return;
     try {
       await api.delete(`/properties/${id}`);
       showToast('Property deleted successfully', 'success');
       fetchProperties();
     } catch (err: any) {
       showToast(err.response?.data?.message || 'Failed to delete property', 'error');
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteType || !deleteItemId) return;
+    setIsDeleting(true);
+    try {
+      if (deleteType === 'property') {
+        await api.delete(`/properties/${deleteItemId}`);
+        showToast('Property deleted successfully', 'success');
+        fetchProperties();
+        if (selectedProperty && selectedProperty._id === deleteItemId) {
+          setCurrentView('properties');
+          setSelectedProperty(null);
+        }
+      } else if (deleteType === 'room') {
+        await api.delete(`/properties/rooms/${deleteItemId}`);
+        showToast('Room deleted', 'success');
+        fetchRoomsForProperty(deleteItemExtraId);
+        fetchProperties();
+      }
+      setIsDeleteModalOpen(false);
+      setDeleteType(null);
+      setDeleteItemId('');
+      setDeleteItemExtraId('');
+    } catch (err: any) {
+      showToast(err.response?.data?.message || 'Failed to perform delete action', 'error');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -738,7 +801,7 @@ export default function AdminPropertiesPage() {
                                 Manage Spaces
                               </button>
                               <button
-                                onClick={() => handleDeleteProperty(prop._id)}
+                                onClick={() => triggerDeleteProperty(prop._id)}
                                 className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-500/10 transition-colors"
                               >
                                 <Trash2 className="w-4 h-4" />
@@ -859,7 +922,7 @@ export default function AdminPropertiesPage() {
                             </button>
                           )}
                           <button
-                            onClick={() => handleDeleteRoom(room._id, selectedProperty._id)}
+                            onClick={() => triggerDeleteRoom(room._id, selectedProperty._id)}
                             className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 border border-rose-500/20 transition-all"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -1646,6 +1709,66 @@ export default function AdminPropertiesPage() {
                 {renderDocItem('Aadhaar Card Document', 'aadhaar', selectedTenant)}
                 {renderDocItem('Lease Rental Agreement', 'agreement', selectedTenant)}
                 {renderDocItem('Occupant Verification Photo', 'photo', selectedTenant)}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-md shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
+            <div className="flex justify-between items-center p-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
+              <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-rose-500" />
+                {deleteConfirmTitle}
+              </h3>
+              <button
+                onClick={() => {
+                  setIsDeleteModalOpen(false);
+                  setDeleteType(null);
+                  setDeleteItemId('');
+                  setDeleteItemExtraId('');
+                }}
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5 flex-1">
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
+                {deleteConfirmMessage}
+              </p>
+              
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsDeleteModalOpen(false);
+                    setDeleteType(null);
+                    setDeleteItemId('');
+                    setDeleteItemExtraId('');
+                  }}
+                  className="px-4 py-2 text-sm font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDelete}
+                  disabled={isDeleting}
+                  className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white text-sm font-bold rounded-xl shadow-md shadow-rose-500/20 disabled:opacity-50 transition-all flex items-center gap-2"
+                >
+                  {isDeleting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Deleting...
+                    </>
+                  ) : (
+                    'Delete'
+                  )}
+                </button>
               </div>
             </div>
           </div>
