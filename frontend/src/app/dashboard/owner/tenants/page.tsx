@@ -30,6 +30,7 @@ export default function TenantsPage() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isAlertPopupOpen, setIsAlertPopupOpen] = useState(false);
 
   // Step-based registration wizard
   const [wizardStep, setWizardStep] = useState(1);
@@ -506,6 +507,42 @@ export default function TenantsPage() {
     } finally {
       setIsBillingSending(false);
     }
+  };
+
+  const handleSendWhatsAppAlert = () => {
+    if (!selectedTenantForProfile) return;
+
+    const fullName = selectedTenantForProfile.fullName;
+    const phone = selectedTenantForProfile.phone;
+    const cleanPhone = phone.replace(/\D/g, '');
+    
+    const propName = selectedTenantForProfile.assignedProperty?.propertyName || 'N/A';
+    const roomNum = selectedTenantForProfile.assignedRoom?.roomNumber || 'N/A';
+    
+    const baseRent = selectedTenantForProfile.rentAmount !== undefined && selectedTenantForProfile.rentAmount !== null
+      ? selectedTenantForProfile.rentAmount
+      : (selectedTenantForProfile.assignedRoom?.monthlyRent || 0);
+
+    const outstanding = getOutstandingBalance(selectedTenantForProfile._id);
+    
+    let additionalChargesText = '';
+    let additionalTotal = 0;
+    if (selectedTenantForProfile.additionalCharges && selectedTenantForProfile.additionalCharges.length > 0) {
+      additionalChargesText = '\nAdditional Charges:\n' + selectedTenantForProfile.additionalCharges
+        .map((c: any) => {
+          additionalTotal += c.amount;
+          return `- ${c.description}: ₹${c.amount}`;
+        })
+        .join('\n');
+    }
+
+    const totalDue = outstanding + additionalTotal;
+
+    const messageText = `Hello *${fullName}*,\n\nThis is an invoice alert regarding your accommodation at *${propName}*, Room *${roomNum}*.\n\n*Pending Dues Details*:\n- Base Rent: ₹${baseRent}\n- Historical Unpaid Dues: ₹${outstanding}${additionalChargesText}\n\n*Total Amount Due*: ₹${totalDue}\n\nPlease clear your outstanding dues soon.\n\nThank you!`;
+
+    const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(messageText)}`;
+    window.open(waUrl, '_blank');
+    setIsAlertPopupOpen(false);
   };
 
   const handleCheckoutTenant = async (e: React.FormEvent) => {
@@ -1299,8 +1336,18 @@ export default function TenantsPage() {
                   )}
 
                   {inviteUrl && (
-                    <div className="p-3 rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-900 text-xs font-semibold break-all">
-                      Invitation sent: {inviteUrl}
+                    <div className="p-3 rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-950 text-xs font-semibold flex items-center justify-between gap-3">
+                      <span className="truncate">Invitation Link Ready</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(inviteUrl);
+                          showToast('Invitation link copied to clipboard!', 'success');
+                        }}
+                        className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
+                      >
+                        Copy Link
+                      </button>
                     </div>
                   )}
 
@@ -1378,7 +1425,7 @@ export default function TenantsPage() {
                         <div>
                           <label className="block text-xs font-bold mb-1 uppercase text-slate-500 dark:text-slate-400">Phone</label>
                           <input
-                            type="tel"
+                            type="number"
                             value={phone}
                             onChange={(e) => setPhone(e.target.value)}
                             className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
@@ -1389,7 +1436,7 @@ export default function TenantsPage() {
                         <div>
                           <label className="block text-xs font-bold mb-1 uppercase text-slate-500 dark:text-slate-400">Emergency Phone</label>
                           <input
-                            type="tel"
+                            type="number"
                             value={emergencyContact}
                             onChange={(e) => setEmergencyContact(e.target.value)}
                             className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
@@ -1659,7 +1706,7 @@ export default function TenantsPage() {
                     <div>
                       <label className="block text-[10px] font-bold mb-1 uppercase text-slate-500">Phone</label>
                       <input
-                        type="tel"
+                        type="number"
                         value={editPhone}
                         onChange={(e) => setEditPhone(e.target.value)}
                         className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-sm dark:bg-slate-900 text-slate-900 dark:text-white"
@@ -1669,11 +1716,10 @@ export default function TenantsPage() {
                     <div>
                       <label className="block text-[10px] font-bold mb-1 uppercase text-slate-500">Emergency Phone</label>
                       <input
-                        type="tel"
+                        type="number"
                         value={editEmergencyContact}
                         onChange={(e) => setEditEmergencyContact(e.target.value)}
                         className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-sm dark:bg-slate-900 text-slate-900 dark:text-white"
-                        required
                       />
                     </div>
                   </div>
@@ -1686,7 +1732,6 @@ export default function TenantsPage() {
                         value={editOccupation}
                         onChange={(e) => setEditOccupation(e.target.value)}
                         className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-sm dark:bg-slate-900 text-slate-900 dark:text-white"
-                        required
                       />
                     </div>
                     <div>
@@ -1989,24 +2034,84 @@ export default function TenantsPage() {
                   {/* Manual Bill Dispatch Button */}
                   <button
                     type="button"
-                    onClick={handleSendMonthlyBill}
-                    disabled={isBillingSending}
-                    className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-750 text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-500/10 flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-[0.99] transition-transform disabled:opacity-50"
+                    onClick={() => setIsAlertPopupOpen(true)}
+                    className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-750 text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-500/10 flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-[0.99] transition-transform"
                   >
-                    {isBillingSending ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Generating Rent Bill & Emailing...
-                      </>
-                    ) : (
-                      <>
-                        <Send className="w-4 h-4" />
-                        Generate & Email Bill to Tenant
-                      </>
-                    )}
+                    <Send className="w-4 h-4" />
+                    Send Billing Alert / Invoice
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Billing Alert Popup Modal ── */}
+      {isAlertPopupOpen && selectedTenantForProfile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-md shadow-2xl border border-slate-200 dark:border-slate-800 p-6 relative animate-in zoom-in-95 duration-200 text-slate-900 dark:text-white">
+            <button 
+              onClick={() => setIsAlertPopupOpen(false)} 
+              className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-650"
+              type="button"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <h3 className="text-lg font-extrabold mb-2 flex items-center gap-2">
+              <Send className="w-5 h-5 text-primary" />
+              Dispatch Billing Alert
+            </h3>
+            <p className="text-xs text-slate-555 dark:text-slate-450 mb-5">
+              Choose the delivery channel to send the invoice and outstanding dues statement to <span className="font-bold text-slate-800 dark:text-slate-200">{selectedTenantForProfile.fullName}</span>.
+            </p>
+
+            <div className="space-y-3">
+              {/* Option 1: Email Alert */}
+              <button
+                type="button"
+                onClick={async () => {
+                  setIsAlertPopupOpen(false);
+                  await handleSendMonthlyBill();
+                }}
+                disabled={isBillingSending}
+                className="w-full py-3.5 bg-slate-50 hover:bg-slate-100 dark:bg-slate-950 dark:hover:bg-slate-850 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-white rounded-2xl text-xs font-bold transition-all flex items-center justify-center gap-2"
+              >
+                {isBillingSending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Generating & Emailing...
+                  </>
+                ) : (
+                  <>
+                    <Mail className="w-4.5 h-4.5 text-primary" />
+                    Send via Email Alert (PDF Invoice)
+                  </>
+                )}
+              </button>
+
+              {/* Option 2: WhatsApp Alert */}
+              <button
+                type="button"
+                onClick={handleSendWhatsAppAlert}
+                className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-md shadow-emerald-500/10"
+              >
+                <svg className="w-4.5 h-4.5 fill-current" viewBox="0 0 24 24">
+                  <path d="M12.012 2c-5.506 0-9.989 4.478-9.99 9.984a9.96 9.96 0 0 0 1.333 4.993L2 22l5.233-1.371a9.918 9.918 0 0 0 4.777 1.222h.005c5.505 0 9.99-4.478 9.99-9.985C22 6.478 17.517 2 12.012 2zm5.922 14.195c-.247.697-1.42 1.37-1.954 1.458-.485.08-1.12.138-3.224-.734-2.69-1.115-4.425-3.86-4.56-4.037-.137-.18-1.077-1.433-1.077-2.735 0-1.3.682-1.938.925-2.203.243-.264.53-.33.707-.33h.505c.16 0 .376-.06.59.353.22.424.75 1.834.816 1.97.067.135.11.293.022.473-.09.18-.135.293-.266.446-.13.153-.275.342-.392.459-.13.13-.267.272-.115.534.152.26.674 1.116 1.442 1.802.99.883 1.82 1.157 2.08 1.287.26.13.41.11.564-.06.155-.176.663-.77.84-.1.353.13.707.397.77.618s.77 1.768.99 2.298c.222.53.222.98.099 1.22z"/>
+                </svg>
+                Send via WhatsApp Message
+              </button>
+            </div>
+
+            <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 text-center">
+              <button 
+                type="button" 
+                onClick={() => setIsAlertPopupOpen(false)}
+                className="text-xs font-semibold text-slate-500 hover:text-slate-700"
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>

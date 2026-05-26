@@ -16,6 +16,7 @@ import maintenanceRoutes from './routes/maintenance.routes.js';
 import verificationRoutes from './routes/verification.routes.js';
 import dashboardRoutes from './routes/dashboard.routes.js';
 import settingRoutes from './routes/setting.routes.js';
+import expenseRoutes from './routes/expense.routes.js';
 
 const app = express();
 
@@ -86,6 +87,7 @@ app.use('/api/maintenance', maintenanceRoutes);
 app.use('/api/verification', verificationRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/settings', settingRoutes);
+app.use('/api/expenses', expenseRoutes);
 
 // Base route
 app.get('/health', (req, res) => {

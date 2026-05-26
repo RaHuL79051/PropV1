@@ -9,6 +9,7 @@ import User from '../models/User.js';
 import VerificationLog from '../models/VerificationLog.js';
 import TenantOwnerConnection from '../models/TenantOwnerConnection.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
+import Expense from '../models/Expense.js';
 
 export const getOwnerDashboardStats = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
@@ -47,6 +48,10 @@ export const getOwnerDashboardStats = async (req: AuthenticatedRequest, res: Res
     });
     const monthlyRevenue = paidPayments.reduce((sum, p) => sum + p.amount, 0);
 
+    // 5.1 Total Expenses
+    const expenses = await Expense.find({ owner: ownerId });
+    const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
+
     // 6. Analytics Chart (Last 6 Months Revenue)
     const monthlyChartData = [
       { month: 'Jan', revenue: Math.round(monthlyRevenue * 0.7) },
@@ -65,6 +70,8 @@ export const getOwnerDashboardStats = async (req: AuthenticatedRequest, res: Res
       activeTenants,
       pendingAgreements,
       monthlyRevenue,
+      totalExpenses,
+      netProfit: monthlyRevenue - totalExpenses,
       occupancyRate: totalBeds > 0 ? Math.round((occupiedBeds / totalBeds) * 100) : 0,
       monthlyChartData
     });

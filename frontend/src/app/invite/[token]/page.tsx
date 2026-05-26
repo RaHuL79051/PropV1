@@ -194,7 +194,7 @@ export default function TenantInvitePage() {
                     <div className="relative">
                       <Phone className="absolute left-3.5 top-3.5 w-4 h-4 text-slate-400" />
                       <input
-                        type="tel"
+                        type="number"
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
                         className="w-full pl-10 pr-4 py-3 rounded-xl border border-white/10 bg-white/5 text-sm outline-none focus:ring-2 focus:ring-primary/30 text-white"
@@ -206,12 +206,11 @@ export default function TenantInvitePage() {
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Emergency Contact</label>
                     <input
-                      type="tel"
+                      type="number"
                       value={emergencyContact}
                       onChange={(e) => setEmergencyContact(e.target.value)}
                       className="w-full px-4 py-3 rounded-xl border border-white/10 bg-white/5 text-sm outline-none focus:ring-2 focus:ring-primary/30 text-white"
                       placeholder="Family member / Guardian"
-                      required
                     />
                   </div>
                 </div>
@@ -225,7 +224,6 @@ export default function TenantInvitePage() {
                       onChange={(e) => setOccupation(e.target.value)}
                       className="w-full px-4 py-3 rounded-xl border border-white/10 bg-white/5 text-sm outline-none focus:ring-2 focus:ring-primary/30 text-white"
                       placeholder="e.g. Professional, Student"
-                      required
                     />
                   </div>
                   <div>

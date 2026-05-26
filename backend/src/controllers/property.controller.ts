@@ -9,7 +9,7 @@ import { checkUnpaidPersonsLimit } from './tenant.controller.js';
 
 export const createProperty = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const { propertyName, address, description, images, totalRooms, roomType = 'pg', ownerId: bodyOwnerId } = req.body;
+    const { propertyName, address, description, images, totalRooms = 0, roomType = 'pg', ownerId: bodyOwnerId } = req.body;
     const ownerId = req.user?.role === 'admin' && bodyOwnerId ? bodyOwnerId : req.user?.userId;
 
     const property = await Property.create({

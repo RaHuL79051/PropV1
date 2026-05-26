@@ -1,5 +1,5 @@
+import 'dotenv/config';
 import mongoose from 'mongoose';
-import dotenv from 'dotenv';
 import app from './app.js';
 import User from './models/User.js';
 import Setting from './models/Setting.js';
@@ -8,7 +8,6 @@ import TenantOwnerConnection from './models/TenantOwnerConnection.js';
 import bcrypt from 'bcrypt';
 import { startMonthlyBillingScheduler } from './utils/scheduler.js';
 
-dotenv.config();
 
 const PORT = process.env.PORT || 5000;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/proptenant';

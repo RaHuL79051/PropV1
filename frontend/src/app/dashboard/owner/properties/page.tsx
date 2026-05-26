@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import api from '../../../../lib/api';
 import { useToastStore } from '../../../../store/toastStore';
 import {
@@ -31,6 +32,7 @@ const loadRazorpayScript = (): Promise<boolean> => {
 };
 
 export default function PropertiesPage() {
+  const router = useRouter();
   const showToast = useToastStore((state) => state.showToast);
   const [properties, setProperties] = useState<Property[]>([]);
   const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
@@ -289,7 +291,7 @@ export default function PropertiesPage() {
   const [propertyName, setPropertyName] = useState('');
   const [address, setAddress] = useState('');
   const [description, setDescription] = useState('');
-  const [totalRooms, setTotalRooms] = useState(1);
+  const [totalRooms, setTotalRooms] = useState(0);
   const [propertyRoomType, setPropertyRoomType] = useState<'flat' | 'pg'>('pg');
 
   // Add Room form
@@ -628,7 +630,7 @@ export default function PropertiesPage() {
       });
       showToast('Property created successfully!', 'success');
       setIsAddModalOpen(false);
-      setPropertyName(''); setAddress(''); setDescription(''); setTotalRooms(1); setPropertyRoomType('pg');
+      setPropertyName(''); setAddress(''); setDescription(''); setTotalRooms(0); setPropertyRoomType('pg');
       fetchProperties(); fetchBillingStatus();
     } catch (err: any) {
       showToast(err.response?.data?.message || 'Failed to create property', 'error');
@@ -2172,26 +2174,6 @@ export default function PropertiesPage() {
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-sm h-20 focus:outline-none focus:ring-1 focus:ring-primary text-slate-900 dark:text-white"
                   placeholder="Describe building amenities, location, nearby landmarks..." />
               </div>
-              <div>
-                <label className="block text-xs font-bold mb-2 uppercase tracking-wider text-slate-500">Default Room Type</label>
-                <div className="flex gap-6">
-                  <label className="flex items-center gap-2 text-sm cursor-pointer">
-                    <input type="radio" name="propRoomType" checked={propertyRoomType === 'pg'} onChange={() => setPropertyRoomType('pg')} className="text-primary focus:ring-primary" />
-                    <span className="text-slate-800 dark:text-slate-200 font-semibold">Paying Guest (PG)</span>
-                  </label>
-                  <label className="flex items-center gap-2 text-sm cursor-pointer">
-                    <input type="radio" name="propRoomType" checked={propertyRoomType === 'flat'} onChange={() => setPropertyRoomType('flat')} className="text-primary focus:ring-primary" />
-                    <span className="text-slate-800 dark:text-slate-200 font-semibold">Flat / Apartment</span>
-                  </label>
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-bold mb-1 uppercase tracking-wider text-slate-500">Total Rooms</label>
-                <input type="number" value={totalRooms}
-                  onChange={(e) => setTotalRooms(Math.max(1, parseInt(e.target.value) || 1))}
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary"
-                  min={1} required />
-              </div>
 
               <button type="submit" disabled={submitting}
                 className="w-full py-3 bg-primary hover:bg-primary-hover text-white rounded-xl text-sm font-bold shadow-md shadow-primary/20 disabled:opacity-50 transition-all mt-2">
@@ -2422,323 +2404,54 @@ export default function PropertiesPage() {
               </p>
             </div>
 
-            {/* Tabs */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
-              <button
-                type="button"
-                onClick={() => setAssignMode('existing')}
-                className={`flex items-center justify-center gap-2 py-3 rounded-2xl border text-sm font-bold transition-all ${assignMode === 'existing'
-                  ? 'border-primary bg-primary/5 text-primary shadow-sm shadow-primary/5'
-                  : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-950/40 text-slate-600 dark:text-slate-400'
-                  }`}
-              >
-                <Users className="w-4 h-4" />
-                Existing Tenant
-              </button>
-              <button
-                type="button"
-                onClick={() => setAssignMode('new')}
-                className={`flex items-center justify-center gap-2 py-3 rounded-2xl border text-sm font-bold transition-all ${assignMode === 'new'
-                  ? 'border-primary bg-primary/5 text-primary shadow-sm shadow-primary/5'
-                  : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-950/40 text-slate-600 dark:text-slate-400'
-                  }`}
-              >
-                <Plus className="w-4 h-4" />
-                Register / Invite New
-              </button>
-            </div>
-
-            {/* TAB 1: Existing Tenant */}
-            {assignMode === 'existing' && (
-              <form onSubmit={handleAssignExistingTenant} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold mb-1.5 uppercase text-slate-500 dark:text-slate-400">Select Unallocated Tenant</label>
-                  {unassignedTenants.length === 0 ? (
-                    <div className="p-4 bg-slate-50 dark:bg-slate-950 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl text-center text-xs text-slate-500 italic">
-                      No unallocated tenants found. Please choose the "Register / Invite New" tab to add one.
-                    </div>
-                  ) : (
-                    <select
-                      value={selectedTenantToAssign}
-                      onChange={(e) => setSelectedTenantToAssign(e.target.value)}
-                      className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-sm dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-                      required
-                    >
-                      <option value="">-- Choose Tenant --</option>
-                      {unassignedTenants.map((t) => (
-                        <option key={t._id} value={t._id}>
-                          {t.fullName} ({t.phone})
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={submitting || !selectedTenantToAssign}
-                  className="w-full py-3.5 bg-primary hover:bg-primary-hover text-white rounded-xl text-xs font-bold shadow-md shadow-primary/20 disabled:opacity-50 transition-all hover:scale-[1.01]"
-                >
-                  {submitting ? 'Allocating...' : 'Confirm Allocation'}
-                </button>
-              </form>
-            )}
-
-            {/* TAB 2: Register/Invite New Tenant */}
-            {assignMode === 'new' && (
-              <div className="space-y-4">
-                {/* Step 1: Aadhaar Check */}
-                {!assignVerificationResult ? (
-                  <div className="space-y-4">
-                    <div>
-                      <h4 className="text-sm font-bold flex items-center gap-1.5 text-slate-800 dark:text-slate-200">
-                        <ShieldCheck className="w-5 h-5 text-primary" /> Aadhaar Verification
-                      </h4>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                        Perform a quick background check and verify occupant ratings before assigning space.
-                      </p>
-                    </div>
-
-                    <div className="space-y-3">
-                      <label className="block text-xs font-bold uppercase text-slate-500 dark:text-slate-400">Aadhaar Card Number (12 Digits)</label>
-                      <div className="flex gap-2 flex-col">
-                        <div className="relative flex-1">
-                          <input
-                            type="text"
-                            value={assignAadhaar}
-                            onChange={(e) => setAssignAadhaar(e.target.value.replace(/\D/g, '').slice(0, 12))}
-                            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-                            placeholder="Enter 12-digit number"
-                            maxLength={12}
-                          />
-                          <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
-                        </div>
-                        <button
-                          type="button"
-                          disabled={assignAadhaarVerifying || assignAadhaar.length !== 12}
-                          onClick={handleAssignVerifyAadhaar}
-                          className="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-bold shadow-md shadow-primary/20 transition-all hover:scale-[1.02] disabled:opacity-50 disabled:scale-100 flex items-center gap-1.5 shrink-0"
-                          style={{ margin: "0 auto", width: "100%", display: "flex", justifyContent: "center" }}
-                        >
-                          {assignAadhaarVerifying ? (
-                            <><Loader2 className="w-3.5 h-3.5 animate-spin" />Checking...</>
-                          ) : (
-                            'Check Aadhaar'
-                          )}
-                        </button>
-                      </div>
-                    </div>
+            <form onSubmit={handleAssignExistingTenant} className="space-y-4 text-left">
+              <div>
+                <label className="block text-xs font-bold mb-1.5 uppercase text-slate-500 dark:text-slate-400">Select Unallocated Tenant</label>
+                {unassignedTenants.length === 0 ? (
+                  <div className="p-4 bg-slate-50 dark:bg-slate-950 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl text-center text-xs text-slate-500 italic">
+                    No unallocated tenants found.
                   </div>
                 ) : (
-                  /* Step 2: Form Choices */
-                  <div className="space-y-5">
-                    <div className="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-slate-800">
-                      <span className="text-xs font-bold uppercase text-slate-450">Screening: {assignVerificationResult.verificationLog.result.creditScore} Index ({assignVerificationResult.verificationLog.result.riskLevel} Risk)</span>
-                      <button
-                        type="button"
-                        onClick={() => setAssignVerificationResult(null)}
-                        className="text-[10px] text-primary font-bold hover:underline"
-                      >
-                        Reset Verification
-                      </button>
-                    </div>
-
-                    {!assignVerificationResult?.isNewTenant ? (
-                      <div className="grid grid-cols-2 gap-3">
-                        <button
-                          type="button"
-                          onClick={() => setAssignRegMode('invite')}
-                          className={`flex items-center justify-between rounded-xl border px-3.5 py-2.5 text-left transition-all ${assignRegMode === 'invite'
-                            ? 'border-primary bg-primary/5 text-primary'
-                            : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-950/40 text-slate-600 dark:text-slate-400'
-                            }`}
-                        >
-                          <div>
-                            <div className="text-xs font-bold">Email Invite</div>
-                            <div className="text-[9px] text-slate-400 leading-tight">Tenant registers themselves via link.</div>
-                          </div>
-                          <Mail className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setAssignRegMode('manual')}
-                          className={`flex items-center justify-between rounded-xl border px-3.5 py-2.5 text-left transition-all ${assignRegMode === 'manual'
-                            ? 'border-primary bg-primary/5 text-primary'
-                            : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-950/40 text-slate-600 dark:text-slate-400'
-                            }`}
-                        >
-                          <div>
-                            <div className="text-xs font-bold">Manual Register</div>
-                            <div className="text-[9px] text-slate-400 leading-tight">Allocate now by entering info.</div>
-                          </div>
-                          <User className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 rounded-xl text-xs text-amber-800 dark:text-amber-350 font-semibold">
-                        ⚠️ This is a new tenant record. An email invitation is required to link them to your registry.
-                      </div>
-                    )}
-
-                    {assignInviteUrl && (
-                      <div className="p-3 rounded-xl border border-emerald-250 bg-emerald-50 text-emerald-900 text-xs font-semibold break-all">
-                        Invite URL: <span className="font-normal">{assignInviteUrl}</span>
-                      </div>
-                    )}
-
-                    {/* Reg Mode 1: Invite */}
-                    {assignRegMode === 'invite' && (
-                      <div className="space-y-4 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/20">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-[10px] font-bold mb-1 uppercase text-slate-400">Email Address</label>
-                            <input
-                              type="email"
-                              value={assignInviteEmail || assignEmail}
-                              onChange={(e) => {
-                                setAssignInviteEmail(e.target.value);
-                                setAssignEmail(e.target.value);
-                              }}
-                              className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-primary outline-none"
-                              placeholder="tenant@example.com"
-                              required
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[10px] font-bold mb-1 uppercase text-slate-400">Joining Date</label>
-                            <input
-                              type="date"
-                              value={assignJoiningDate}
-                              onChange={(e) => setAssignJoiningDate(e.target.value)}
-                              className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-primary outline-none"
-                              required
-                            />
-                          </div>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={handleSendInviteInAssign}
-                          disabled={assignInviteSending}
-                          className="w-full py-2.5 bg-primary hover:bg-primary-hover text-white rounded-xl text-xs font-bold shadow-md shadow-primary/20 flex items-center justify-center gap-1.5 transition-transform hover:scale-[1.01]"
-                        >
-                          {assignInviteSending ? (
-                            <><Loader2 className="w-3.5 h-3.5 animate-spin" />Sending...</>
-                          ) : (
-                            <><Send className="w-3.5 h-3.5" />Send Invite Link</>
-                          )}
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Reg Mode 2: Manual */}
-                    {assignRegMode === 'manual' && (
-                      <form onSubmit={handleRegisterNewTenantInAssign} className="space-y-3">
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-[10px] font-bold mb-1 uppercase text-slate-400">Full Name</label>
-                            <input
-                              type="text"
-                              value={assignFullName}
-                              onChange={(e) => setAssignFullName(e.target.value)}
-                              className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent text-xs focus:ring-2 focus:ring-primary outline-none"
-                              placeholder="Tenant Name"
-                              required
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[10px] font-bold mb-1 uppercase text-slate-400">Aadhaar (Read-Only)</label>
-                            <input
-                              type="text"
-                              value={assignAadhaar}
-                              disabled
-                              className="w-full px-3 py-2 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-950/40 text-slate-450 text-xs cursor-not-allowed"
-                            />
-                          </div>
-                        </div>
-
-                        <div>
-                          <label className="block text-[10px] font-bold mb-1 uppercase text-slate-400">Email Address</label>
-                          <input
-                            type="email"
-                            value={assignEmail}
-                            onChange={(e) => setAssignEmail(e.target.value)}
-                            className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent text-xs focus:ring-2 focus:ring-primary outline-none"
-                            placeholder="tenant@example.com"
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-[10px] font-bold mb-1 uppercase text-slate-400">Phone</label>
-                            <input
-                              type="tel"
-                              value={assignPhone}
-                              onChange={(e) => setAssignPhone(e.target.value)}
-                              className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent text-xs focus:ring-2 focus:ring-primary outline-none"
-                              placeholder="Mobile Number"
-                              required
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[10px] font-bold mb-1 uppercase text-slate-400">Emergency Phone</label>
-                            <input
-                              type="tel"
-                              value={assignEmergency}
-                              onChange={(e) => setAssignEmergency(e.target.value)}
-                              className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent text-xs focus:ring-2 focus:ring-primary outline-none"
-                              placeholder="Guardian Phone"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-[10px] font-bold mb-1 uppercase text-slate-400">Joining Date</label>
-                            <input
-                              type="date"
-                              value={assignJoiningDate}
-                              onChange={(e) => setAssignJoiningDate(e.target.value)}
-                              className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent text-xs focus:ring-2 focus:ring-primary outline-none"
-                              required
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[10px] font-bold mb-1 uppercase text-slate-400">Occupation</label>
-                            <input
-                              type="text"
-                              value={assignOccupation}
-                              onChange={(e) => setAssignOccupation(e.target.value)}
-                              className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent text-xs focus:ring-2 focus:ring-primary outline-none"
-                              placeholder="Occupation"
-                            />
-                          </div>
-                        </div>
-
-                        <div>
-                          <label className="block text-[10px] font-bold mb-1 uppercase text-slate-400">Permanent Address</label>
-                          <input
-                            type="text"
-                            value={assignAddress}
-                            onChange={(e) => setAssignAddress(e.target.value)}
-                            className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent text-xs focus:ring-2 focus:ring-primary outline-none"
-                            placeholder="Home Town Address"
-                          />
-                        </div>
-
-                        <button
-                          type="submit"
-                          disabled={assignSubmitting}
-                          className="w-full py-3 bg-primary hover:bg-primary-hover text-white rounded-xl text-xs font-bold shadow-md shadow-primary/20 disabled:opacity-50 transition-all hover:scale-[1.01]"
-                        >
-                          {assignSubmitting ? 'Registering...' : 'Register and Allocate Space'}
-                        </button>
-                      </form>
-                    )}
-                  </div>
+                  <select
+                    value={selectedTenantToAssign}
+                    onChange={(e) => setSelectedTenantToAssign(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-sm dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                    required
+                  >
+                    <option value="">-- Choose Tenant --</option>
+                    {unassignedTenants.map((t) => (
+                      <option key={t._id} value={t._id}>
+                        {t.fullName} ({t.phone})
+                      </option>
+                    ))}
+                  </select>
                 )}
               </div>
-            )}
+
+              <button
+                type="submit"
+                disabled={submitting || !selectedTenantToAssign}
+                className="w-full py-3.5 bg-primary hover:bg-primary-hover text-white rounded-xl text-xs font-bold shadow-md shadow-primary/20 disabled:opacity-50 transition-all hover:scale-[1.01]"
+              >
+                {submitting ? 'Allocating...' : 'Confirm Allocation'}
+              </button>
+            </form>
+
+            <div className="mt-6 pt-5 border-t border-slate-150 dark:border-slate-800 text-center">
+              <p className="text-xs text-slate-400 mb-3">Don't see your tenant? Register or invite them first.</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAssignModalOpen(false);
+                  resetAssignForm();
+                  router.push('/dashboard/owner/tenants');
+                }}
+                className="w-full py-2.5 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-950/40 dark:text-slate-400 text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Go to Tenants Registry
+              </button>
+            </div>
           </div>
         </div>
       )}

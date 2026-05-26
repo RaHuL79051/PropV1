@@ -15,7 +15,7 @@ const PropertySchema: Schema = new Schema(
     address: { type: String, required: true, trim: true },
     description: { type: String, default: '' },
     images: [{ type: String }],
-    totalRooms: { type: Number, required: true, min: 1 },
+    totalRooms: { type: Number, required: false, default: 0, min: 0 },
     owner: { type: Schema.Types.ObjectId, ref: 'User', required: true }
   },
   { timestamps: true }

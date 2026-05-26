@@ -5,7 +5,7 @@ import api from '../../../lib/api';
 import { useToastStore } from '../../../store/toastStore';
 import { 
   Home, Users, CreditCard, Percent, ArrowUpRight, 
-  TrendingUp, Calendar, AlertTriangle, Loader2 
+  TrendingUp, Calendar, AlertTriangle, Loader2, Plus, Wallet
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -18,6 +18,8 @@ interface OwnerStats {
   activeTenants: number;
   pendingAgreements: number;
   monthlyRevenue: number;
+  totalExpenses: number;
+  netProfit: number;
   occupancyRate: number;
   monthlyChartData: Array<{ month: string; revenue: number }>;
 }
@@ -76,10 +78,18 @@ export default function OwnerDashboardPage() {
   return (
     <div className="space-y-8">
       {/* Welcome Banner */}
-      <div className="p-6 rounded-2xl bg-gradient-to-r from-primary to-accent text-white shadow-xl relative overflow-hidden">
+      <div className="p-6 rounded-2xl bg-gradient-to-r from-primary to-accent text-white shadow-xl relative overflow-hidden flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="absolute inset-0 bg-black/10 mix-blend-overlay" />
-        <h2 className="text-2xl font-extrabold">Executive Portfolio Hub</h2>
-        <p className="text-white/80 text-sm mt-1">Review operational occupancy rates, rent invoices, and tenant risk levels.</p>
+        <div className="relative z-10">
+          <h2 className="text-2xl font-extrabold">Executive Portfolio Hub</h2>
+          <p className="text-white/80 text-sm mt-1">Review operational occupancy rates, rent invoices, and tenant risk levels.</p>
+        </div>
+        <a
+          href="/dashboard/owner/payments?tab=expenses"
+          className="relative z-10 flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-white hover:bg-slate-100 text-primary font-bold text-sm shadow-md transition-all hover:scale-105 shrink-0"
+        >
+          <Plus className="w-4 h-4" /> Add Expense
+        </a>
       </div>
 
       {/* Properties Setup Welcome Banner */}
@@ -123,7 +133,7 @@ export default function OwnerDashboardPage() {
       )}
 
       {/* Grid Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
         <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm">
           <div className="flex justify-between items-start">
             <span className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Properties</span>
@@ -167,14 +177,42 @@ export default function OwnerDashboardPage() {
 
         <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm">
           <div className="flex justify-between items-start">
-            <span className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Monthly Profit</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Monthly Revenue</span>
             <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400">
               <CreditCard className="w-5 h-5" />
             </div>
           </div>
           <div className="mt-4">
-            <h3 className="text-3xl font-extrabold text-slate-900 dark:text-white">₹{stats.monthlyRevenue.toLocaleString()}</h3>
-            <span className="text-xs text-slate-400 font-semibold block mt-1">Fully cleared payments</span>
+            <h3 className="text-3xl font-extrabold text-slate-900 dark:text-white">₹{stats.monthlyRevenue.toLocaleString('en-IN')}</h3>
+            <span className="text-xs text-slate-400 font-semibold block mt-1">Rent payments cleared</span>
+          </div>
+        </div>
+
+        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm">
+          <div className="flex justify-between items-start">
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Total Expenses</span>
+            <div className="p-2 rounded-lg bg-rose-50 dark:bg-rose-950 text-rose-600 dark:text-rose-450">
+              <Wallet className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="mt-4">
+            <h3 className="text-3xl font-extrabold text-slate-900 dark:text-white">₹{(stats.totalExpenses || 0).toLocaleString('en-IN')}</h3>
+            <span className="text-xs text-slate-400 font-semibold block mt-1">Operating outlays</span>
+          </div>
+        </div>
+
+        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm">
+          <div className="flex justify-between items-start">
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Net Profit</span>
+            <div className="p-2 rounded-lg bg-emerald-55 border border-emerald-200/50 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400">
+              <TrendingUp className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="mt-4">
+            <h3 className={`text-3xl font-extrabold ${(stats.netProfit || 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+              ₹{(stats.netProfit || 0).toLocaleString('en-IN')}
+            </h3>
+            <span className="text-xs text-slate-400 font-semibold block mt-1">Take-home earnings</span>
           </div>
         </div>
       </div>

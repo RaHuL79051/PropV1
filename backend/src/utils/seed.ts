@@ -43,6 +43,7 @@ const seedData = async () => {
       phone: '9999988888',
       passwordHash: hashedAdminPassword,
       role: 'admin',
+      status: 'approved',
       isActive: true
     });
 

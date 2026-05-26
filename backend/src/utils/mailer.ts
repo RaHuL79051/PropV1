@@ -9,6 +9,7 @@ const mailPass = process.env.MAIL_PASSWORD || process.env.SMTP_PASS || undefined
 const mailFrom = process.env.MAIL_FROM_ADDRESS || process.env.MAIL_FROM || mailUser || 'no-reply@proptenant.local';
 const mailFromName = process.env.MAIL_FROM_NAME || 'Property Manager';
 
+
 const buildTransporter = () => {
   if (mailerMode === 'log') {
     return null;
