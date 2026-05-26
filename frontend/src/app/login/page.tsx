@@ -66,12 +66,7 @@ export default function LoginPage() {
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Sign in to manage your property console</p>
         </div>
 
-        {/* Demo Credentials Alert */}
-        <div className="mb-6 p-4 rounded-xl bg-primary/10 border border-primary/20 text-slate-700 dark:text-slate-300 text-xs">
-          <p className="font-bold mb-1">Demo Credentials:</p>
-          <p>Owner: <span className="font-semibold">owner@proptenant.com</span> / <span className="font-semibold">owner123</span></p>
-          <p>Admin: <span className="font-semibold">admin@proptenant.com</span> / <span className="font-semibold">admin123</span></p>
-        </div>
+
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>

@@ -35,7 +35,7 @@ app.use((req, res, next) => {
 // CORS configuration
 const configuredCorsOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000')
   .split(',')
-  .map((origin) => origin.trim())
+  .map((origin) => origin.trim().replace(/\/+$/, '')) // strip trailing slashes
   .filter(Boolean);
 
 const devLocalhostOrigins = [
@@ -46,15 +46,19 @@ const devLocalhostOrigins = [
 ];
 
 const allowedOrigins = Array.from(new Set([...configuredCorsOrigins, ...devLocalhostOrigins]));
+console.log('[CORS] Allowed origins:', allowedOrigins);
+
 app.use(
   cors({
     origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, curl, server-to-server)
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
         return;
       }
 
-      callback(new Error(`CORS blocked for origin ${origin}`));
+      console.warn(`[CORS] Blocked request from origin: ${origin}`);
+      callback(null, false); // Gracefully reject instead of throwing
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],

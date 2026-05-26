@@ -52,6 +52,7 @@ const seedData = async () => {
       phone: '8888877777',
       passwordHash: hashedOwnerPassword,
       role: 'owner',
+      status: 'approved',
       isActive: true
     });
     console.log('Database seeded successfully!');
