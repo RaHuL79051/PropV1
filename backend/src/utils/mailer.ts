@@ -14,7 +14,8 @@ const buildTransporter = () => {
     return null;
   }
 
-  if (mailerMode === 'maildev' || mailHost === '127.0.0.1' || mailHost === 'localhost') {
+  // Local maildev or direct local testing
+  if (mailHost === '127.0.0.1' || mailHost === 'localhost') {
     return nodemailer.createTransport({
       host: mailHost,
       port: mailPort,
@@ -24,11 +25,14 @@ const buildTransporter = () => {
     });
   }
 
+  // Real SMTP server (like Brevo, Gmail, SES, etc.)
   return nodemailer.createTransport({
     host: mailHost,
     port: mailPort,
-    secure: process.env.MAIL_SECURE === 'true' || process.env.SMTP_SECURE === 'true',
-    auth: mailUser && mailPass ? { user: mailUser, pass: mailPass } : undefined
+    secure: mailPort === 465 || process.env.MAIL_SECURE === 'true' || process.env.SMTP_SECURE === 'true',
+    auth: mailUser && mailPass ? { user: mailUser, pass: mailPass } : undefined,
+    // Explicitly demand TLS upgrades on submission port 587
+    requireTLS: mailPort === 587
   });
 };
 
