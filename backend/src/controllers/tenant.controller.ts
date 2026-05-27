@@ -660,7 +660,6 @@ export const createTenantInvite = async (req: AuthenticatedRequest, res: Respons
       bedNumber: (invite.assignedBed as any)?.bedNumber || null
     });
 
-    let emailSent = true;
     try {
       await sendMail({
         to: targetEmail,
@@ -668,13 +667,13 @@ export const createTenantInvite = async (req: AuthenticatedRequest, res: Respons
         text: inviteEmail.text,
         html: inviteEmail.html
       });
-    } catch (mailError) {
-      emailSent = false;
+    } catch (mailError: any) {
       console.error('[Invite] Failed to send invitation email:', mailError);
+      throw new AppError(`Failed to send invitation email: ${mailError.message || 'SMTP Server Error'}`, 500);
     }
 
     return res.status(201).json({
-      message: 'Invitation link generated successfully',
+      message: 'Invitation link generated and sent successfully',
       invite: {
         id: invite._id,
         aadhaarNumber: invite.aadhaarNumber,
@@ -682,7 +681,7 @@ export const createTenantInvite = async (req: AuthenticatedRequest, res: Respons
         expiresAt: invite.expiresAt,
         inviteUrl
       },
-      emailSent
+      emailSent: true
     });
   } catch (error) {
     next(error);
