@@ -5,7 +5,7 @@ import api from '../../../lib/api';
 import { useToastStore } from '../../../store/toastStore';
 import { 
   Users, Building, ShieldCheck, CreditCard, ShieldAlert, 
-  Percent, TrendingUp, Calendar, Loader2, ArrowUpRight, FileText 
+  Percent, TrendingUp, Calendar, Loader2, ArrowUpRight, FileText, Download, X
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { VerificationLog } from '../../../types';
@@ -28,6 +28,37 @@ export default function AdminDashboardPage() {
   const showToast = useToastStore((state) => state.showToast);
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
+  const [installOS, setInstallOS] = useState<'ios' | 'android' | 'windows' | 'mac' | 'other'>('other');
+
+  const getDeviceOS = () => {
+    const userAgent = typeof window !== 'undefined' ? (navigator.userAgent || navigator.vendor || (window as any).opera) : '';
+    if (/iPad|iPhone|iPod/.test(userAgent) && !(window as any).MSStream) return 'ios';
+    if (navigator.maxTouchPoints && navigator.maxTouchPoints > 2 && /Macintosh/.test(userAgent)) return 'ios';
+    if (/android/i.test(userAgent)) return 'android';
+    if (/Win/i.test(userAgent)) return 'windows';
+    if (/Mac/i.test(userAgent)) return 'mac';
+    return 'other';
+  };
+
+  const handleDownloadApp = async () => {
+    const os = getDeviceOS();
+    setInstallOS(os);
+
+    // Android and Windows: Try native install prompt first
+    const deferredPrompt = (window as any).deferredPrompt;
+    if (deferredPrompt && (os === 'android' || os === 'windows')) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        localStorage.setItem('pwa_installed', 'true');
+      }
+      (window as any).deferredPrompt = null;
+    } else {
+      setIsInstallModalOpen(true);
+    }
+  };
 
   // Settings states
   const [defaultTerms, setDefaultTerms] = useState('');
@@ -85,10 +116,18 @@ export default function AdminDashboardPage() {
   return (
     <div className="space-y-8">
       {/* Welcome Banner */}
-      <div className="p-6 rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 text-white shadow-xl relative overflow-hidden">
+      <div className="p-6 rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 text-white shadow-xl relative overflow-hidden flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="absolute inset-0 bg-primary/10 mix-blend-overlay" />
-        <h2 className="text-2xl font-extrabold">System Administration Console</h2>
-        <p className="text-slate-300 text-sm mt-1">Global platform metrics, registered property managers, and security audit verifications.</p>
+        <div className="relative z-10">
+          <h2 className="text-2xl font-extrabold">System Administration Console</h2>
+          <p className="text-slate-300 text-sm mt-1">Global platform metrics, registered property managers, and security audit verifications.</p>
+        </div>
+        <button
+          onClick={handleDownloadApp}
+          className="relative z-10 flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-white/20 hover:bg-white/30 text-white font-bold text-sm border border-white/30 shadow-md transition-all hover:scale-105 shrink-0 cursor-pointer w-full sm:w-auto"
+        >
+          <Download className="w-4 h-4" /> Download App
+        </button>
       </div>
 
       {/* Grid Stats */}
@@ -245,6 +284,91 @@ export default function AdminDashboardPage() {
           </div>
         </div>
       </div>
+
+      {isInstallModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative animate-in zoom-in-95 duration-200 text-slate-900 dark:text-white">
+            <button
+              onClick={() => setIsInstallModalOpen(false)}
+              className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-650 dark:hover:text-slate-350"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2.5 rounded-xl bg-primary/10 text-primary">
+                <Download className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold">Install PropTenant App</h3>
+                <p className="text-xs text-slate-400">Add to your device for easy access anytime</p>
+              </div>
+            </div>
+
+            <div className="space-y-4 py-3 border-t border-b border-slate-100 dark:border-slate-850 my-4 text-xs sm:text-sm leading-relaxed text-slate-750 dark:text-slate-300">
+              {installOS === 'ios' && (
+                <div className="space-y-2.5">
+                  <p className="font-semibold text-slate-900 dark:text-white">To install on your iOS device:</p>
+                  <ol className="list-decimal pl-5 space-y-1.5 text-slate-600 dark:text-slate-400 font-medium">
+                    <li>Tap the <span className="font-bold text-primary">Share</span> button (rectangle with up arrow) in Safari.</li>
+                    <li>Scroll down the share menu and select <span className="font-bold text-primary">Add to Home Screen</span>.</li>
+                    <li>Tap <span className="font-bold text-primary">Add</span> in the top-right corner to complete the installation.</li>
+                  </ol>
+                </div>
+              )}
+
+              {installOS === 'mac' && (
+                <div className="space-y-2.5">
+                  <p className="font-semibold text-slate-900 dark:text-white">To install on macOS:</p>
+                  <ul className="list-disc pl-5 space-y-1.5 text-slate-600 dark:text-slate-400 font-medium">
+                    <li><span className="font-bold text-primary">On Chrome:</span> Click the install icon (monitor with down arrow) in the right side of your browser's address bar.</li>
+                    <li><span className="font-bold text-primary">On Safari:</span> Go to the top menu, select <span className="font-bold">File</span>, and click <span className="font-bold text-primary">Add to Dock...</span></li>
+                  </ul>
+                </div>
+              )}
+
+              {installOS === 'android' && (
+                <div className="space-y-2.5">
+                  <p className="font-semibold text-slate-900 dark:text-white">To install on Android:</p>
+                  <ol className="list-decimal pl-5 space-y-1.5 text-slate-600 dark:text-slate-400 font-medium">
+                    <li>Tap the menu icon <span className="font-bold text-primary">(three vertical dots)</span> in Chrome.</li>
+                    <li>Select <span className="font-bold text-primary">Add to Home screen</span> or <span className="font-bold text-primary">Install app</span>.</li>
+                    <li>Confirm by tapping <span className="font-bold text-primary">Install</span>.</li>
+                  </ol>
+                </div>
+              )}
+
+              {installOS === 'windows' && (
+                <div className="space-y-2.5">
+                  <p className="font-semibold text-slate-900 dark:text-white">To install on Windows:</p>
+                  <ol className="list-decimal pl-5 space-y-1.5 text-slate-600 dark:text-slate-400 font-medium">
+                    <li>Look at the right side of the address bar at the top of your browser.</li>
+                    <li>Click the <span className="font-bold text-primary">Install icon</span> (desktop monitor with down arrow) or click the three dots menu &gt; <span className="font-bold text-primary">Install PropTenant</span>.</li>
+                    <li>Click <span className="font-bold text-primary">Install</span> to confirm.</li>
+                  </ol>
+                </div>
+              )}
+
+              {installOS === 'other' && (
+                <div className="space-y-2.5">
+                  <p className="font-semibold text-slate-900 dark:text-white">To install PropTenant on your device:</p>
+                  <ul className="list-disc pl-5 space-y-1.5 text-slate-600 dark:text-slate-400 font-medium">
+                    <li><span className="font-bold text-primary">On Mobile:</span> Tap your browser's Share/Menu button and select <span className="font-bold">Add to Home Screen</span> or <span className="font-bold">Install</span>.</li>
+                    <li><span className="font-bold text-primary">On Desktop:</span> Look for the install monitor icon in the address bar.</li>
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={() => setIsInstallModalOpen(false)}
+              className="w-full py-3 bg-primary hover:bg-primary-hover text-white rounded-xl text-xs font-bold shadow-md shadow-primary/20 transition-all hover:scale-[1.02] cursor-pointer"
+            >
+              Got It
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

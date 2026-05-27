@@ -60,83 +60,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     if (isDismissedOrInstalled) return;
 
-    // Show the install banner with the download button by default
-    setShowInstallBanner(true);
-
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
+      (window as any).deferredPrompt = e;
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
     window.addEventListener('appinstalled', () => {
       localStorage.setItem('pwa_installed', 'true');
-      setShowInstallBanner(false);
       setDeferredPrompt(null);
+      (window as any).deferredPrompt = null;
     });
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     };
   }, []);
-
-  const handleInstallClick = async () => {
-    const os = getDeviceOS();
-
-    if (os === 'ios') {
-      alert(
-        "PWA Installation on iOS:\n\n" +
-        "1. Tap the 'Share' button at the bottom/top of your Safari browser.\n" +
-        "2. Scroll down and tap 'Add to Home Screen'.\n" +
-        "3. Confirm by tapping 'Add' to install PropTenant on your home screen."
-      );
-      return;
-    }
-
-    if (os === 'mac') {
-      alert(
-        "PWA Installation on Mac:\n\n" +
-        "- On Chrome: Click the 'Install' icon (desktop monitor with down arrow) in the address bar at the top right, or click the three dots menu > 'Save and share' > 'Install page'.\n" +
-        "- On Safari: Go to File > 'Add to Dock...' to add PropTenant to your macOS dock."
-      );
-      return;
-    }
-
-    // Android and Windows: Try native install prompt first
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      if (outcome === 'accepted') {
-        localStorage.setItem('pwa_installed', 'true');
-        setShowInstallBanner(false);
-      }
-      setDeferredPrompt(null);
-    } else {
-      // Fallback instructions if native prompt is not available
-      if (os === 'android') {
-        alert(
-          "PWA Installation on Android:\n\n" +
-          "1. Tap the menu icon (three dots) in Chrome.\n" +
-          "2. Tap 'Add to Home screen' or 'Install app'.\n" +
-          "3. Confirm the installation."
-        );
-      } else if (os === 'windows') {
-        alert(
-          "PWA Installation on Windows:\n\n" +
-          "1. Look at the right side of the address bar at the top of your browser.\n" +
-          "2. Click the 'Install' icon (desktop monitor with down arrow) or click the three dots menu > 'Install PropTenant'.\n" +
-          "3. Click 'Install' in the confirmation prompt."
-        );
-      } else {
-        alert(
-          "To install PropTenant on your device:\n\n" +
-          "- On Mobile: Tap Share / Menu and select 'Add to Home Screen' or 'Install'.\n" +
-          "- On Desktop: Look for the install icon in the browser address bar."
-        );
-      }
-    }
-  };
 
   useEffect(() => {
     setIsMounted(true);
@@ -248,34 +189,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* 2. Main content area wrapper */}
       <div className="flex-1 flex flex-col min-h-screen min-w-0">
-        {/* PWA Install Banner */}
-        {showInstallBanner && isOverviewPage && (
-          <div className="bg-primary/10 border-b border-primary/25 px-4 py-2.5 flex items-center justify-between gap-3 text-xs sm:text-sm animate-in slide-in-from-top duration-300 z-40 bg-white dark:bg-slate-900">
-            <div className="flex items-center gap-2 text-primary font-semibold truncate">
-              <span className="bg-primary text-white p-1 rounded-md text-[10px] uppercase font-extrabold shrink-0">App</span>
-              <span className="truncate text-slate-800 dark:text-slate-200">Install PropTenant on your device for a native PWA co-living experience!</span>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                onClick={handleInstallClick}
-                className="px-3 py-1.5 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-lg transition-all shadow-sm shrink-0"
-              >
-                Download
-              </button>
-              <button
-                onClick={() => {
-                  localStorage.setItem('pwa_installed', 'true');
-                  setShowInstallBanner(false);
-                }}
-                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded-lg transition-colors"
-                type="button"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Navbar */}
         <header className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/70 px-4 py-3 md:px-6 md:py-4 backdrop-blur-md glass">
           <div className="flex items-center gap-4">
