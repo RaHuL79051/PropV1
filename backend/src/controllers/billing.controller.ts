@@ -108,7 +108,7 @@ export const createBedBillingOrder = async (req: AuthenticatedRequest, res: Resp
       const order = await razorpay.orders.create({
         amount: amountDue * 100, // amount in paise
         currency: 'INR',
-        receipt: `receipt_beds_${ownerId}_${Date.now()}`
+        receipt: `rcpt_${ownerId!.toString().slice(-6)}_${Date.now()}`
       });
 
       return res.status(201).json({

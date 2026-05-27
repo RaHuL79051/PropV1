@@ -37,6 +37,11 @@ export default function TenantsPage() {
   const [deleteTenantId, setDeleteTenantId] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Reactivate connection confirmation states
+  const [isReactivateModalOpen, setIsReactivateModalOpen] = useState(false);
+  const [reactivateAadhaar, setReactivateAadhaar] = useState('');
+  const [isReactivating, setIsReactivating] = useState(false);
+
   // Step-based registration wizard
   const [wizardStep, setWizardStep] = useState(1);
   const [aadhaarVerifying, setAadhaarVerifying] = useState(false);
@@ -97,19 +102,8 @@ export default function TenantsPage() {
       }
 
       if (res.data.connectionStatus === 'inactive') {
-        if (confirm('This user already exists in the system (inactive connection). Would you like to reactivate this connection?')) {
-          try {
-            await api.post('/tenants/connections/activate', { aadhaarNumber });
-            showToast('Tenant connection reactivated successfully!', 'success');
-            setIsAddModalOpen(false);
-            resetForm();
-            fetchTenants();
-            fetchBillingStatus();
-            fetchPayments();
-          } catch (activateErr: any) {
-            showToast(activateErr.response?.data?.message || 'Failed to activate connection', 'error');
-          }
-        }
+        setReactivateAadhaar(aadhaarNumber);
+        setIsReactivateModalOpen(true);
         setVerificationResult(null);
         return;
       }
@@ -120,6 +114,26 @@ export default function TenantsPage() {
       showToast(err.response?.data?.message || 'Failed to retrieve Aadhaar verification report', 'error');
     } finally {
       setAadhaarVerifying(false);
+    }
+  };
+
+  const handleConfirmReactivate = async () => {
+    if (!reactivateAadhaar) return;
+    setIsReactivating(true);
+    try {
+      await api.post('/tenants/connections/activate', { aadhaarNumber: reactivateAadhaar });
+      showToast('Tenant connection reactivated successfully!', 'success');
+      setIsReactivateModalOpen(false);
+      setIsAddModalOpen(false);
+      resetForm();
+      fetchTenants();
+      fetchBillingStatus();
+      fetchPayments();
+    } catch (activateErr: any) {
+      showToast(activateErr.response?.data?.message || 'Failed to activate connection', 'error');
+    } finally {
+      setIsReactivating(false);
+      setReactivateAadhaar('');
     }
   };
 
@@ -2117,6 +2131,62 @@ export default function TenantsPage() {
                     </>
                   ) : (
                     'Remove'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reactivate Connection Modal */}
+      {isReactivateModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-md shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
+            <div className="flex justify-between items-center p-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
+              <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <ShieldAlert className="w-5 h-5 text-indigo-500" />
+                Reactivate Connection
+              </h3>
+              <button
+                onClick={() => {
+                  setIsReactivateModalOpen(false);
+                  setReactivateAadhaar('');
+                }}
+                className="text-slate-400 hover:text-slate-650 dark:hover:text-slate-300 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5 flex-1">
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
+                This user already exists in the system (inactive connection). Would you like to reactivate this connection?
+              </p>
+              
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsReactivateModalOpen(false);
+                    setReactivateAadhaar('');
+                  }}
+                  className="px-4 py-2 text-sm font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmReactivate}
+                  disabled={isReactivating}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl shadow-md shadow-indigo-600/20 disabled:opacity-50 transition-all flex items-center gap-2"
+                >
+                  {isReactivating ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Reactivating...
+                    </>
+                  ) : (
+                    'Reactivate'
                   )}
                 </button>
               </div>
