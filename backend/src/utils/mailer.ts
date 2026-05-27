@@ -12,11 +12,13 @@ const mailFromName = process.env.MAIL_FROM_NAME || 'Property Manager';
 
 const buildTransporter = () => {
   if (mailerMode === 'log') {
+    console.log('[mailer] SMTP mailer mode is set to "log". Emails will only be logged to the console.');
     return null;
   }
 
   // Local maildev or direct local testing
   if (mailHost === '127.0.0.1' || mailHost === 'localhost') {
+    console.log(`[mailer] Initializing local SMTP transporter: host=${mailHost}, port=${mailPort}, user=${mailUser || 'none'}`);
     return nodemailer.createTransport({
       host: mailHost,
       port: mailPort,
@@ -27,10 +29,12 @@ const buildTransporter = () => {
   }
 
   // Real SMTP server (like Brevo, Gmail, SES, etc.)
+  const secure = mailPort === 465 || process.env.MAIL_SECURE === 'true' || process.env.SMTP_SECURE === 'true';
+  console.log(`[mailer] Initializing production SMTP transporter: host=${mailHost}, port=${mailPort}, user=${mailUser || 'none'}, secure=${secure}`);
   return nodemailer.createTransport({
     host: mailHost,
     port: mailPort,
-    secure: mailPort === 465 || process.env.MAIL_SECURE === 'true' || process.env.SMTP_SECURE === 'true',
+    secure,
     auth: mailUser && mailPass ? { user: mailUser, pass: mailPass } : undefined,
     // Explicitly demand TLS upgrades on submission port 587
     requireTLS: mailPort === 587

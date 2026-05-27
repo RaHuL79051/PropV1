@@ -44,7 +44,6 @@ export default function TenantsPage() {
   const [registrationMode, setRegistrationMode] = useState<'manual' | 'invite'>('manual');
   const [inviteSending, setInviteSending] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteUrl, setInviteUrl] = useState('');
 
   // Form states
   const getTodayDateString = () => {
@@ -167,7 +166,6 @@ export default function TenantsPage() {
         joiningDate: joiningDate || null
       });
 
-      setInviteUrl(res.data.invite.inviteUrl);
       showToast('Invitation link sent successfully', 'success');
     } catch (err: any) {
       if (err.response?.data?.errors && Array.isArray(err.response.data.errors)) {
@@ -625,7 +623,6 @@ export default function TenantsPage() {
     setVerificationResult(null);
     setRegistrationMode('manual');
     setInviteEmail('');
-    setInviteUrl('');
     setJoiningDate(getTodayDateString());
   };
 
@@ -1361,22 +1358,6 @@ export default function TenantsPage() {
                   {verificationResult?.isNewTenant && (
                     <div className="p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 rounded-2xl text-xs text-blue-800 dark:text-blue-300 font-semibold">
                       💡 This is a new tenant record. You can send them an invite to fill their details, or register them manually.
-                    </div>
-                  )}
-
-                  {inviteUrl && (
-                    <div className="p-3 rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-950 text-xs font-semibold flex items-center justify-between gap-3">
-                      <span className="truncate">Invitation Link Ready</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(inviteUrl);
-                          showToast('Invitation link copied to clipboard!', 'success');
-                        }}
-                        className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
-                      >
-                        Copy Link
-                      </button>
                     </div>
                   )}
 
