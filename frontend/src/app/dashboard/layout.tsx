@@ -17,6 +17,37 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { user, token, clearAuth, isAuthenticated } = useAuthStore();
   const showToast = useToastStore();
 
+  const getDeviceOS = () => {
+    const userAgent = typeof window !== 'undefined' ? (navigator.userAgent || navigator.vendor || (window as any).opera) : '';
+    
+    // iOS detection
+    if (/iPad|iPhone|iPod/.test(userAgent) && !(window as any).MSStream) {
+      return 'ios';
+    }
+    
+    // iPadOS 13+ detection
+    if (navigator.maxTouchPoints && navigator.maxTouchPoints > 2 && /Macintosh/.test(userAgent)) {
+      return 'ios';
+    }
+
+    // Android detection
+    if (/android/i.test(userAgent)) {
+      return 'android';
+    }
+
+    // Windows detection
+    if (/Win/i.test(userAgent)) {
+      return 'windows';
+    }
+
+    // macOS detection
+    if (/Mac/i.test(userAgent)) {
+      return 'mac';
+    }
+
+    return 'other';
+  };
+
   const [darkMode, setDarkMode] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -29,10 +60,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     if (isDismissedOrInstalled) return;
 
+    // Show the install banner with the download button by default
+    setShowInstallBanner(true);
+
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
-      setShowInstallBanner(true);
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -49,14 +82,60 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, []);
 
   const handleInstallClick = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') {
-      localStorage.setItem('pwa_installed', 'true');
-      setShowInstallBanner(false);
+    const os = getDeviceOS();
+
+    if (os === 'ios') {
+      alert(
+        "PWA Installation on iOS:\n\n" +
+        "1. Tap the 'Share' button at the bottom/top of your Safari browser.\n" +
+        "2. Scroll down and tap 'Add to Home Screen'.\n" +
+        "3. Confirm by tapping 'Add' to install PropTenant on your home screen."
+      );
+      return;
     }
-    setDeferredPrompt(null);
+
+    if (os === 'mac') {
+      alert(
+        "PWA Installation on Mac:\n\n" +
+        "- On Chrome: Click the 'Install' icon (desktop monitor with down arrow) in the address bar at the top right, or click the three dots menu > 'Save and share' > 'Install page'.\n" +
+        "- On Safari: Go to File > 'Add to Dock...' to add PropTenant to your macOS dock."
+      );
+      return;
+    }
+
+    // Android and Windows: Try native install prompt first
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        localStorage.setItem('pwa_installed', 'true');
+        setShowInstallBanner(false);
+      }
+      setDeferredPrompt(null);
+    } else {
+      // Fallback instructions if native prompt is not available
+      if (os === 'android') {
+        alert(
+          "PWA Installation on Android:\n\n" +
+          "1. Tap the menu icon (three dots) in Chrome.\n" +
+          "2. Tap 'Add to Home screen' or 'Install app'.\n" +
+          "3. Confirm the installation."
+        );
+      } else if (os === 'windows') {
+        alert(
+          "PWA Installation on Windows:\n\n" +
+          "1. Look at the right side of the address bar at the top of your browser.\n" +
+          "2. Click the 'Install' icon (desktop monitor with down arrow) or click the three dots menu > 'Install PropTenant'.\n" +
+          "3. Click 'Install' in the confirmation prompt."
+        );
+      } else {
+        alert(
+          "To install PropTenant on your device:\n\n" +
+          "- On Mobile: Tap Share / Menu and select 'Add to Home Screen' or 'Install'.\n" +
+          "- On Desktop: Look for the install icon in the browser address bar."
+        );
+      }
+    }
   };
 
   useEffect(() => {
