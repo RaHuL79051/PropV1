@@ -617,7 +617,17 @@ export const uploadDocuments = async (req: AuthenticatedRequest, res: Response, 
 
 export const createTenantInvite = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const { aadhaarNumber, email, assignedProperty, assignedRoom, assignedBed, joiningDate, ownerId: bodyOwnerId } = req.body;
+    const { 
+      aadhaarNumber, 
+      email, 
+      sendMethod = 'email',
+      whatsappNumber,
+      assignedProperty, 
+      assignedRoom, 
+      assignedBed, 
+      joiningDate, 
+      ownerId: bodyOwnerId 
+    } = req.body;
     const ownerId = req.user?.role === 'admin' && bodyOwnerId ? bodyOwnerId : req.user?.userId;
 
     if (!ownerId) {
@@ -630,8 +640,13 @@ export const createTenantInvite = async (req: AuthenticatedRequest, res: Respons
       targetEmail = existingTenant.email;
     }
 
-    if (!targetEmail) {
+    if (sendMethod === 'email' && !targetEmail) {
       throw new AppError('Tenant email is required to send an invitation', 400);
+    }
+
+    // Set fallback placeholder email for WhatsApp method if none exists
+    if (sendMethod === 'whatsapp' && !targetEmail) {
+      targetEmail = `whatsapp_${aadhaarNumber}@proptenant.local`;
     }
 
     const rawToken = crypto.randomBytes(32).toString('hex');
@@ -650,30 +665,35 @@ export const createTenantInvite = async (req: AuthenticatedRequest, res: Respons
     });
 
     const inviteUrl = `${getFrontendUrl(req)}/invite/${rawToken}`;
-    const subject = 'Property Manager invitation to complete your tenant profile';
-    const inviteEmail = buildTenantInviteEmail({
-      ownerName: String((req.user as any)?.fullName || 'Property Manager'),
-      tenantEmail: targetEmail,
-      inviteUrl,
-      propertyName: (invite.assignedProperty as any)?.propertyName || null,
-      roomNumber: (invite.assignedRoom as any)?.roomNumber || null,
-      bedNumber: (invite.assignedBed as any)?.bedNumber || null
-    });
 
-    try {
-      await sendMail({
-        to: targetEmail,
-        subject,
-        text: inviteEmail.text,
-        html: inviteEmail.html
+    if (sendMethod === 'email') {
+      const subject = 'Property Manager invitation to complete your tenant profile';
+      const inviteEmail = buildTenantInviteEmail({
+        ownerName: String((req.user as any)?.fullName || 'Property Manager'),
+        tenantEmail: targetEmail,
+        inviteUrl,
+        propertyName: (invite.assignedProperty as any)?.propertyName || null,
+        roomNumber: (invite.assignedRoom as any)?.roomNumber || null,
+        bedNumber: (invite.assignedBed as any)?.bedNumber || null
       });
-    } catch (mailError: any) {
-      console.error('[Invite] Failed to send invitation email:', mailError);
-      throw new AppError(`Failed to send invitation email: ${mailError.message || 'SMTP Server Error'}`, 500);
+
+      try {
+        await sendMail({
+          to: targetEmail,
+          subject,
+          text: inviteEmail.text,
+          html: inviteEmail.html
+        });
+      } catch (mailError: any) {
+        console.error('[Invite] Failed to send invitation email:', mailError);
+        throw new AppError(`Failed to send invitation email: ${mailError.message || 'SMTP Server Error'}`, 500);
+      }
     }
 
     return res.status(201).json({
-      message: 'Invitation link generated and sent successfully',
+      message: sendMethod === 'email'
+        ? 'Invitation link generated and sent successfully'
+        : 'Invitation link generated successfully for WhatsApp',
       invite: {
         id: invite._id,
         aadhaarNumber: invite.aadhaarNumber,
@@ -681,7 +701,7 @@ export const createTenantInvite = async (req: AuthenticatedRequest, res: Respons
         expiresAt: invite.expiresAt,
         inviteUrl
       },
-      emailSent: true
+      emailSent: sendMethod === 'email'
     });
   } catch (error) {
     next(error);

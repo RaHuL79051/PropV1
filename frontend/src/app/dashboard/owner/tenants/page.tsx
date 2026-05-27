@@ -44,6 +44,8 @@ export default function TenantsPage() {
   const [registrationMode, setRegistrationMode] = useState<'manual' | 'invite'>('manual');
   const [inviteSending, setInviteSending] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteMethod, setInviteMethod] = useState<'email' | 'whatsapp'>('email');
+  const [inviteWhatsapp, setInviteWhatsapp] = useState('');
 
   // Form states
   const getTodayDateString = () => {
@@ -149,24 +151,49 @@ export default function TenantsPage() {
       return;
     }
 
-    const resolvedEmail = (inviteEmail || tenantEmail).trim();
-    if (!resolvedEmail) {
-      showToast('Tenant email is required to send the invitation', 'error');
-      return;
+    let resolvedEmail = '';
+    if (inviteMethod === 'email') {
+      resolvedEmail = (inviteEmail || tenantEmail).trim();
+      if (!resolvedEmail) {
+        showToast('Tenant email is required to send the invitation', 'error');
+        return;
+      }
+    } else {
+      if (!inviteWhatsapp || inviteWhatsapp.length < 10) {
+        showToast('Valid WhatsApp number is required to send the invitation', 'error');
+        return;
+      }
     }
 
     setInviteSending(true);
     try {
       const res = await api.post('/tenants/invites', {
         aadhaarNumber,
-        email: resolvedEmail,
+        email: inviteMethod === 'email' ? resolvedEmail : '',
+        sendMethod: inviteMethod,
+        whatsappNumber: inviteMethod === 'whatsapp' ? inviteWhatsapp : '',
         assignedProperty: selectedPropertyId || null,
         assignedRoom: selectedRoomId || null,
         assignedBed: selectedBedId || null,
         joiningDate: joiningDate || null
       });
 
-      showToast('Invitation link sent successfully', 'success');
+      if (inviteMethod === 'email') {
+        showToast('Invitation link sent successfully', 'success');
+        setIsAddModalOpen(false);
+        resetForm();
+      } else {
+        showToast('Invitation generated! Redirecting to WhatsApp...', 'success');
+        const inviteUrl = res.data.invite.inviteUrl;
+        const messageText = `Hello,\n\nYou have been invited to complete your tenant profile for registration.\n\nPlease complete your details here:\n${inviteUrl}\n\nThank you!`;
+        const cleanWhatsapp = inviteWhatsapp.startsWith('91') && inviteWhatsapp.length > 10
+          ? inviteWhatsapp
+          : `91${inviteWhatsapp}`;
+        const waUrl = `https://wa.me/${cleanWhatsapp}?text=${encodeURIComponent(messageText)}`;
+        window.open(waUrl, '_blank');
+        setIsAddModalOpen(false);
+        resetForm();
+      }
     } catch (err: any) {
       if (err.response?.data?.errors && Array.isArray(err.response.data.errors)) {
         const details = err.response.data.errors.map((e: any) => `${e.field.replace('body.', '')}: ${e.message}`).join(', ');
@@ -623,6 +650,8 @@ export default function TenantsPage() {
     setVerificationResult(null);
     setRegistrationMode('manual');
     setInviteEmail('');
+    setInviteMethod('email');
+    setInviteWhatsapp('');
     setJoiningDate(getTodayDateString());
   };
 
@@ -1363,21 +1392,61 @@ export default function TenantsPage() {
 
                   {registrationMode === 'invite' && (
                     <div className="space-y-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 p-4">
+                      {/* Method Selector Pills */}
+                      <div className="flex gap-2 p-1 bg-slate-200/50 dark:bg-slate-800/50 rounded-xl">
+                        <button
+                          type="button"
+                          onClick={() => setInviteMethod('email')}
+                          className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${inviteMethod === 'email'
+                            ? 'bg-white dark:bg-slate-900 text-primary shadow-sm'
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'
+                            }`}
+                        >
+                          <Mail className="w-3.5 h-3.5" />
+                          Email Invite
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setInviteMethod('whatsapp')}
+                          className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${inviteMethod === 'whatsapp'
+                            ? 'bg-white dark:bg-slate-900 text-primary shadow-sm'
+                            : 'text-slate-550 dark:text-slate-450 hover:text-slate-800 dark:hover:text-white'
+                            }`}
+                        >
+                          <Send className="w-3.5 h-3.5" />
+                          WhatsApp Invite
+                        </button>
+                      </div>
+
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-xs font-bold mb-1 uppercase text-slate-500 dark:text-slate-400">Tenant Email</label>
-                          <input
-                            type="email"
-                            value={inviteEmail || tenantEmail}
-                            onChange={(e) => {
-                              setInviteEmail(e.target.value);
-                              setTenantEmail(e.target.value);
-                            }}
-                            className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-                            placeholder="tenant@example.com"
-                            required
-                          />
-                        </div>
+                        {inviteMethod === 'email' ? (
+                          <div>
+                            <label className="block text-xs font-bold mb-1 uppercase text-slate-500 dark:text-slate-400">Tenant Email</label>
+                            <input
+                              type="email"
+                              value={inviteEmail || tenantEmail}
+                              onChange={(e) => {
+                                setInviteEmail(e.target.value);
+                                setTenantEmail(e.target.value);
+                              }}
+                              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                              placeholder="tenant@example.com"
+                              required
+                            />
+                          </div>
+                        ) : (
+                          <div>
+                            <label className="block text-xs font-bold mb-1 uppercase text-slate-500 dark:text-slate-400">Tenant WhatsApp Number</label>
+                            <input
+                              type="tel"
+                              value={inviteWhatsapp}
+                              onChange={(e) => setInviteWhatsapp(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                              placeholder="9876543210"
+                              required
+                            />
+                          </div>
+                        )}
                         <div>
                           <label className="block text-xs font-bold mb-1 uppercase text-slate-500 dark:text-slate-400">Expected Joining Date</label>
                           <div className="relative">
@@ -1579,7 +1648,7 @@ export default function TenantsPage() {
                         </>
                       ) : (
                         <>
-                          Send Invitation Link
+                          {inviteMethod === 'email' ? 'Send Invitation Link' : 'Send WhatsApp Invitation'}
                           <Send className="w-4 h-4" />
                         </>
                       )}

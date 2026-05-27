@@ -77,7 +77,9 @@ export const tenantSchema = z.object({
 export const tenantInviteSchema = z.object({
   body: z.object({
     aadhaarNumber: z.string().length(12, 'Aadhaar must be exactly 12 digits'),
-    email: z.string().email('Invalid email address').optional(),
+    email: z.string().email('Invalid email address').optional().or(z.literal('')),
+    sendMethod: z.enum(['email', 'whatsapp']).optional(),
+    whatsappNumber: z.string().optional().or(z.literal('')),
     assignedProperty: z.string().nullable().optional(),
     assignedRoom: z.string().nullable().optional(),
     assignedBed: z.string().nullable().optional(),
