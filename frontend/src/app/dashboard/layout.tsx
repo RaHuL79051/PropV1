@@ -48,7 +48,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return 'other';
   };
 
-  const [darkMode, setDarkMode] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
@@ -75,7 +74,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     setIsMounted(true);
-    setDarkMode(document.documentElement.classList.contains('dark'));
   }, []);
 
   // Secure Route Gate

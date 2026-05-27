@@ -4,29 +4,12 @@ import Link from 'next/link';
 import { useAuthStore } from '../store/authStore';
 import { 
   Building2, ShieldCheck, CreditCard, Wrench, FileText, 
-  ArrowRight, Users, CheckCircle2, ChevronRight, Moon, Sun, Monitor
+  ArrowRight, Users, CheckCircle2, ChevronRight, Monitor
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
 
 export default function LandingPage() {
   const { isAuthenticated, user } = useAuthStore();
-  const [darkMode, setDarkMode] = useState(false);
 
-  useEffect(() => {
-    setDarkMode(document.documentElement.classList.contains('dark'));
-  }, []);
-
-  const toggleDarkMode = () => {
-    if (document.documentElement.classList.contains('dark')) {
-      document.documentElement.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
-      setDarkMode(false);
-    } else {
-      document.documentElement.classList.add('dark');
-      localStorage.setItem('theme', 'dark');
-      setDarkMode(true);
-    }
-  };
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
@@ -49,12 +32,6 @@ export default function LandingPage() {
         </nav>
 
         <div className="flex items-center gap-4">
-          <button 
-            onClick={toggleDarkMode}
-            className="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors"
-          >
-            {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-          </button>
 
           {isAuthenticated ? (
             <Link
