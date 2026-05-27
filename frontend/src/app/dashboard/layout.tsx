@@ -13,6 +13,7 @@ import {
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const isOverviewPage = pathname === '/dashboard/owner' || pathname === '/dashboard/admin';
   const { user, token, clearAuth, isAuthenticated } = useAuthStore();
   const showToast = useToastStore();
 
@@ -169,7 +170,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* 2. Main content area wrapper */}
       <div className="flex-1 flex flex-col min-h-screen min-w-0">
         {/* PWA Install Banner */}
-        {showInstallBanner && (
+        {showInstallBanner && isOverviewPage && (
           <div className="bg-primary/10 border-b border-primary/25 px-4 py-2.5 flex items-center justify-between gap-3 text-xs sm:text-sm animate-in slide-in-from-top duration-300 z-40 bg-white dark:bg-slate-900">
             <div className="flex items-center gap-2 text-primary font-semibold truncate">
               <span className="bg-primary text-white p-1 rounded-md text-[10px] uppercase font-extrabold shrink-0">App</span>

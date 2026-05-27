@@ -4,11 +4,11 @@ import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import api from '../../../../lib/api';
 import { useToastStore } from '../../../../store/toastStore';
-import { 
-  CreditCard, Plus, CheckCircle, AlertCircle, Calendar, 
-  MapPin, Check, User, Loader2, X, Wallet, Trash2, Filter, 
-  AlertTriangle, ArrowDownRight, ArrowUpRight, TrendingDown, 
-  FileText, ChevronDown, ListFilter 
+import {
+  CreditCard, Plus, CheckCircle, AlertCircle, Calendar,
+  MapPin, Check, User, Loader2, X, Wallet, Trash2, Filter,
+  AlertTriangle, ArrowDownRight, ArrowUpRight, TrendingDown,
+  FileText, ChevronDown, ListFilter
 } from 'lucide-react';
 import { Payment, Tenant } from '../../../../types';
 
@@ -74,7 +74,7 @@ function PaymentsContent() {
 
   // Expense Filters state
   const [categoryFilter, setCategoryFilter] = useState('');
-  const [rangeFilter, setRangeFilter] = useState<'daily' | 'weekly' | 'monthly' | 'all'>('all');
+  const [rangeFilter, setRangeFilter] = useState<'day' | 'weekly' | 'monthly' | 'all'>('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
@@ -112,11 +112,11 @@ function PaymentsContent() {
     try {
       let url = '/expenses';
       const params: any = {};
-      
+
       if (categoryFilter) {
         params.category = categoryFilter;
       }
-      
+
       if (rangeFilter !== 'all') {
         params.range = rangeFilter;
       } else if (startDate && endDate) {
@@ -301,11 +301,10 @@ function PaymentsContent() {
         <button
           type="button"
           onClick={() => setActiveTab('payments')}
-          className={`flex items-center gap-2 px-6 py-3 border-b-2 text-sm font-bold transition-all ${
-            activeTab === 'payments'
+          className={`flex items-center gap-2 px-6 py-3 border-b-2 text-sm font-bold transition-all ${activeTab === 'payments'
               ? 'border-primary text-primary'
               : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-          }`}
+            }`}
         >
           <CreditCard className="w-4 h-4" />
           Rent Invoices
@@ -313,11 +312,10 @@ function PaymentsContent() {
         <button
           type="button"
           onClick={() => setActiveTab('expenses')}
-          className={`flex items-center gap-2 px-6 py-3 border-b-2 text-sm font-bold transition-all ${
-            activeTab === 'expenses'
+          className={`flex items-center gap-2 px-6 py-3 border-b-2 text-sm font-bold transition-all ${activeTab === 'expenses'
               ? 'border-primary text-primary'
               : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-          }`}
+            }`}
         >
           <Wallet className="w-4 h-4" />
           Portfolio Expenses
@@ -544,7 +542,7 @@ function PaymentsContent() {
               <div>
                 <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-450 mb-1.5">Timeline Quick Filter</label>
                 <div className="grid grid-cols-4 gap-1.5 bg-slate-50 dark:bg-slate-955 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
-                  {(['all', 'daily', 'weekly', 'monthly'] as const).map((r) => (
+                  {(['all', 'day', 'weekly', 'monthly'] as const).map((r) => (
                     <button
                       key={r}
                       type="button"
@@ -553,11 +551,10 @@ function PaymentsContent() {
                         setStartDate('');
                         setEndDate('');
                       }}
-                      className={`py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all capitalize ${
-                        rangeFilter === r
+                      className={`py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all capitalize ${rangeFilter === r
                           ? 'bg-primary text-white shadow-sm'
                           : 'text-slate-550 dark:text-slate-400 hover:bg-slate-105 dark:hover:bg-slate-900/60'
-                      }`}
+                        }`}
                     >
                       {r === 'all' ? 'All' : r.replace('ly', '')}
                     </button>
@@ -970,7 +967,7 @@ function PaymentsContent() {
               <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
                 Are you sure you want to delete this expense entry? This action is permanent and cannot be undone.
               </p>
-              
+
               <div className="flex justify-end gap-3">
                 <button
                   type="button"
