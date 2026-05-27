@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import api from '../../../lib/api';
 import { useToastStore } from '../../../store/toastStore';
-import { Building2, Loader2, ShieldCheck, Mail, Phone, User, MapPin, CheckCircle2 } from 'lucide-react';
+import { Building2, Loader2, ShieldCheck, Mail, Phone, User, CheckCircle2 } from 'lucide-react';
 
 interface InviteDetails {
   token: string;
@@ -147,16 +147,6 @@ export default function TenantInvitePage() {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-4 space-y-2 text-sm text-slate-300">
-                <div className="font-bold text-white flex items-center gap-1.5">
-                  <MapPin className="w-4 h-4 text-primary" /> Allocation Details
-                </div>
-                <div className="pl-5 space-y-1 text-slate-400 text-xs">
-                  <div><span className="text-slate-200 font-medium">Property:</span> {invite?.assignedProperty?.propertyName || 'Pending confirmation'}</div>
-                  <div><span className="text-slate-200 font-medium">Room:</span> {invite?.assignedRoom ? `Room ${invite.assignedRoom.roomNumber}` : 'Assigned on arrival'}</div>
-                  <div><span className="text-slate-200 font-medium">Space/Bed:</span> {invite?.assignedBed ? `Bed ${invite.assignedBed.bedNumber}` : 'Assigned on arrival'}</div>
-                </div>
-              </div>
             </div>
 
             <div className="rounded-3xl border border-white/10 bg-slate-900/80 backdrop-blur-xl p-6 shadow-2xl shadow-black/20">

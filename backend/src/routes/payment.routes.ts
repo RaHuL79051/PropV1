@@ -7,7 +7,8 @@ import {
 import {
   getBedBillingStatus,
   createBedBillingOrder,
-  verifyBedBillingPayment
+  verifyBedBillingPayment,
+  canAssignTenant
 } from '../controllers/billing.controller.js';
 import { validate } from '../middleware/validator.js';
 import { paymentSchema, paySchema } from '../validators/schemas.js';
@@ -19,6 +20,7 @@ const router = Router();
 router.get('/bed-billing/status', authenticate, requireRole(['owner']), getBedBillingStatus);
 router.post('/bed-billing/order', authenticate, requireRole(['owner']), createBedBillingOrder);
 router.post('/bed-billing/verify', authenticate, requireRole(['owner']), verifyBedBillingPayment);
+router.get('/licensing/can-assign', authenticate, requireRole(['owner']), canAssignTenant);
 
 // Regular invoice payments
 router.post('/', authenticate, requireRole(['owner', 'admin']), validate(paymentSchema), createPayment);

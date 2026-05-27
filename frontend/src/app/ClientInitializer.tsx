@@ -14,13 +14,35 @@ export default function ClientInitializer() {
       document.documentElement.classList.remove('dark');
       localStorage.removeItem('theme');
     }
-    // Register PWA Service Worker
+    // Register PWA Service Worker (Production Only)
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js')
-          .then((reg) => console.log('Service Worker registered successfully:', reg.scope))
-          .catch((err) => console.error('Service Worker registration failed:', err));
-      });
+      if (process.env.NODE_ENV === 'production') {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then((reg) => console.log('Service Worker registered successfully:', reg.scope))
+            .catch((err) => console.error('Service Worker registration failed:', err));
+        });
+      } else {
+        // Unregister service worker in development to avoid caching chunks or interfering with Turbopack/HMR
+        navigator.serviceWorker.getRegistrations().then((registrations) => {
+          for (const registration of registrations) {
+            registration.unregister().then((success) => {
+              if (success) {
+                console.log('Unregistered service worker in development mode.');
+                // Clear cache storage to ensure clean reload
+                if ('caches' in window) {
+                  caches.keys().then((names) => {
+                    for (const name of names) {
+                      caches.delete(name);
+                    }
+                  });
+                }
+                window.location.reload();
+              }
+            });
+          }
+        });
+      }
     }
   }, [initialize]);
 

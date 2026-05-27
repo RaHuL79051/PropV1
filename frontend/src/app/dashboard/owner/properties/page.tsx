@@ -74,6 +74,14 @@ export default function PropertiesPage() {
   const [unassignedTenants, setUnassignedTenants] = useState<any[]>([]);
   const [selectedTenantToAssign, setSelectedTenantToAssign] = useState('');
   const [assignMode, setAssignMode] = useState<'existing' | 'new'>('existing');
+  
+  const [canAssignDetails, setCanAssignDetails] = useState<{
+    canAssign: boolean;
+    currentLinked: number;
+    paidLimit: number;
+    amountDue: number;
+  } | null>(null);
+  const [isLicensingModalOpen, setIsLicensingModalOpen] = useState(false);
 
   // Unassign Tenant modal states
   const [isUnassignModalOpen, setIsUnassignModalOpen] = useState(false);
@@ -296,6 +304,28 @@ export default function PropertiesPage() {
     setSelectedTenantToAssign('');
   };
   const [submitting, setSubmitting] = useState(false);
+
+  const handleStartAssignFlow = async (context: any) => {
+    try {
+      showToast('Checking licensing status...', 'info');
+      const res = await api.get('/payments/licensing/can-assign');
+      const data = res.data;
+      setCanAssignDetails(data);
+      
+      if (!data.canAssign) {
+        setAssigningContext(context);
+        setIsLicensingModalOpen(true);
+      } else {
+        setAssigningContext(context);
+        setSelectedTenantToAssign('');
+        setAssignMode('existing');
+        await fetchUnassignedTenants();
+        setIsAssignModalOpen(true);
+      }
+    } catch (err: any) {
+      showToast(err.response?.data?.message || 'Failed to verify licensing status', 'error');
+    }
+  };
 
   // Add Property form
   const [propertyName, setPropertyName] = useState('');
@@ -1304,7 +1334,7 @@ export default function PropertiesPage() {
                                           return;
                                         }
                                         const firstVacantBed = vacantBeds[0];
-                                        setAssigningContext({
+                                        handleStartAssignFlow({
                                           propertyId: selectedProperty._id,
                                           propertyName: selectedProperty.propertyName,
                                           roomId: room._id,
@@ -1312,10 +1342,6 @@ export default function PropertiesPage() {
                                           bedId: firstVacantBed._id,
                                           bedNumber: firstVacantBed.bedNumber
                                         });
-                                        setSelectedTenantToAssign('');
-                                        setAssignMode('existing');
-                                        fetchUnassignedTenants();
-                                        setIsAssignModalOpen(true);
                                       }}
                                       disabled={room.occupancyStatus === 'fully_occupied'}
                                       className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-bold transition-all ${room.occupancyStatus !== 'fully_occupied'
@@ -1454,7 +1480,7 @@ export default function PropertiesPage() {
                                     return;
                                   }
                                   const firstVacantBed = vacantBeds[0];
-                                  setAssigningContext({
+                                  handleStartAssignFlow({
                                     propertyId: selectedProperty._id,
                                     propertyName: selectedProperty.propertyName,
                                     roomId: room._id,
@@ -1462,10 +1488,6 @@ export default function PropertiesPage() {
                                     bedId: firstVacantBed._id,
                                     bedNumber: firstVacantBed.bedNumber
                                   });
-                                  setSelectedTenantToAssign('');
-                                  setAssignMode('existing');
-                                  fetchUnassignedTenants();
-                                  setIsAssignModalOpen(true);
                                 }}
                                 disabled={room.occupancyStatus === 'fully_occupied'}
                                 className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-bold transition-all ${room.occupancyStatus !== 'fully_occupied'
@@ -1942,7 +1964,7 @@ export default function PropertiesPage() {
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    setAssigningContext({
+                                    handleStartAssignFlow({
                                       propertyId: selectedProperty._id,
                                       propertyName: selectedProperty.propertyName,
                                       roomId: selectedRoom._id,
@@ -1950,10 +1972,6 @@ export default function PropertiesPage() {
                                       bedId: bed._id,
                                       bedNumber: bed.bedNumber
                                     });
-                                    setSelectedTenantToAssign('');
-                                    setAssignMode('existing');
-                                    fetchUnassignedTenants();
-                                    setIsAssignModalOpen(true);
                                   }}
                                   className="inline-flex items-center justify-center px-2.5 py-1 bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold rounded-lg transition-all"
                                 >
@@ -2128,7 +2146,7 @@ export default function PropertiesPage() {
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setAssigningContext({
+                                handleStartAssignFlow({
                                   propertyId: selectedProperty._id,
                                   propertyName: selectedProperty.propertyName,
                                   roomId: selectedRoom._id,
@@ -2136,10 +2154,6 @@ export default function PropertiesPage() {
                                   bedId: bed._id,
                                   bedNumber: bed.bedNumber
                                 });
-                                setSelectedTenantToAssign('');
-                                setAssignMode('existing');
-                                fetchUnassignedTenants();
-                                setIsAssignModalOpen(true);
                               }}
                               className="inline-flex items-center justify-center px-2.5 py-1 bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold rounded-lg transition-all"
                             >
@@ -2462,6 +2476,126 @@ export default function PropertiesPage() {
                 Go to Tenants Registry
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Subscription Payment Modal ── */}
+      {isLicensingModalOpen && canAssignDetails && assigningContext && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative text-slate-900 dark:text-white">
+            <button
+              onClick={() => {
+                setIsLicensingModalOpen(false);
+                resetAssignForm();
+              }}
+              className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-slate-105 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+              type="button"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="mb-4 text-center">
+              <span className="p-2.5 rounded-full bg-amber-500/10 text-amber-500 inline-block mb-3">
+                <AlertTriangle className="w-8 h-8" />
+              </span>
+              <h3 className="text-xl font-bold">Subscription Payment Required</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5">
+                You have reached your free tenant limit and need to purchase a license before assigning more tenants.
+              </p>
+            </div>
+
+            <div className="space-y-3 my-5 p-4 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-150 dark:border-slate-850 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Current Linked Tenants:</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200">{canAssignDetails.currentLinked}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Current Paid Limit:</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200">{canAssignDetails.paidLimit}</span>
+              </div>
+              <div className="flex justify-between border-t border-slate-200 dark:border-slate-800 pt-2 font-semibold">
+                <span className="text-slate-650 dark:text-slate-350">Amount Due:</span>
+                <span className="text-primary font-black">₹{canAssignDetails.amountDue}/month</span>
+              </div>
+            </div>
+
+            <button
+              onClick={async () => {
+                setIsPaying(true);
+                try {
+                  const orderRes = await api.post('/payments/bed-billing/order');
+                  const { orderId, amount, currency, isSimulated, keyId } = orderRes.data;
+
+                  if (isSimulated) {
+                    showToast('Sandbox mode detected. Simulating payment...', 'info');
+                    await api.post('/payments/bed-billing/verify', { razorpay_order_id: orderId, isMock: true });
+                    showToast('Payment simulated successfully! Licenses activated.', 'success');
+                    setIsLicensingModalOpen(false);
+                    fetchBillingStatus();
+                    fetchProperties();
+                    setSelectedTenantToAssign('');
+                    setAssignMode('existing');
+                    await fetchUnassignedTenants();
+                    setIsAssignModalOpen(true);
+                  } else {
+                    const scriptLoaded = await loadRazorpayScript();
+                    if (!scriptLoaded) {
+                      showToast('Failed to load Razorpay SDK.', 'error');
+                      setIsPaying(false);
+                      return;
+                    }
+                    const options = {
+                      key: keyId,
+                      amount,
+                      currency,
+                      name: 'PropManager Tenant Licensing',
+                      description: `Licensing subscription payment`,
+                      order_id: orderId,
+                      handler: async (response: any) => {
+                        try {
+                          await api.post('/payments/bed-billing/verify', {
+                            razorpay_order_id: response.razorpay_order_id,
+                            razorpay_payment_id: response.razorpay_payment_id,
+                            razorpay_signature: response.razorpay_signature,
+                            isMock: false
+                          });
+                          showToast('Payment verified! Tenant license active.', 'success');
+                          setIsLicensingModalOpen(false);
+                          fetchBillingStatus();
+                          fetchProperties();
+                          setSelectedTenantToAssign('');
+                          setAssignMode('existing');
+                          await fetchUnassignedTenants();
+                          setIsAssignModalOpen(true);
+                        } catch (err: any) {
+                          showToast(err.response?.data?.message || 'Payment verification failed', 'error');
+                        }
+                      },
+                      prefill: { name: '', email: '', contact: '' },
+                      theme: { color: '#2563EB' }
+                    };
+                    const rzp = new (window as any).Razorpay(options);
+                    rzp.open();
+                  }
+                } catch (err: any) {
+                  showToast(err.response?.data?.message || 'Failed to initiate payment', 'error');
+                } finally {
+                  setIsPaying(false);
+                }
+              }}
+              disabled={isPaying}
+              className="w-full py-3.5 bg-primary hover:bg-primary-hover text-white rounded-xl text-xs font-bold shadow-lg shadow-primary/20 disabled:opacity-50 transition-all flex items-center justify-center gap-1.5"
+            >
+              {isPaying ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Processing Payment...
+                </>
+              ) : (
+                <>Pay ₹{canAssignDetails.amountDue} Now</>
+              )}
+            </button>
           </div>
         </div>
       )}

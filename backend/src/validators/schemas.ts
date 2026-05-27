@@ -67,9 +67,6 @@ export const tenantSchema = z.object({
     emergencyContact: z.string().optional().or(z.literal('')),
     occupation: z.string().optional().or(z.literal('')),
     address: z.string().min(5, 'Address is required'),
-    assignedProperty: z.string().nullable().optional(),
-    assignedRoom: z.string().nullable().optional(),
-    assignedBed: z.string().nullable().optional(),
     joiningDate: z.string().optional().nullable(),
   }),
 });
@@ -80,9 +77,6 @@ export const tenantInviteSchema = z.object({
     email: z.string().email('Invalid email address').optional().or(z.literal('')),
     sendMethod: z.enum(['email', 'whatsapp']).optional(),
     whatsappNumber: z.string().optional().or(z.literal('')),
-    assignedProperty: z.string().nullable().optional(),
-    assignedRoom: z.string().nullable().optional(),
-    assignedBed: z.string().nullable().optional(),
     joiningDate: z.string().optional().nullable(),
   }),
 });

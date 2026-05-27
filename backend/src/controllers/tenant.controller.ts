@@ -97,22 +97,12 @@ export const createTenant = async (req: AuthenticatedRequest, res: Response, nex
       emergencyContact,
       occupation,
       address,
-      assignedProperty,
-      assignedRoom,
-      assignedBed,
-      rentAmount,
-      joiningDate,
       ownerId: bodyOwnerId
     } = req.body;
     const ownerId = req.user?.role === 'admin' && bodyOwnerId ? bodyOwnerId : req.user?.userId;
 
     if (!ownerId) {
       throw new AppError('Authentication required', 401);
-    }
-
-    // Check unpaid persons limit if assigning room or bed
-    if ((assignedRoom || assignedBed) && req.user?.role !== 'admin') {
-      await checkUnpaidPersonsLimit(ownerId);
     }
 
     // Check if tenant exists globally
@@ -150,8 +140,8 @@ export const createTenant = async (req: AuthenticatedRequest, res: Response, nex
         tenantRating,
         creditScore,
         previousOwnerFeedback,
-        rentAmount: rentAmount || null,
-        joiningDate: joiningDate ? new Date(joiningDate) : null
+        rentAmount: null,
+        joiningDate: null
       });
     } else {
       // Update tenant details if they already exist globally
@@ -161,57 +151,6 @@ export const createTenant = async (req: AuthenticatedRequest, res: Response, nex
       tenant.emergencyContact = emergencyContact || tenant.emergencyContact;
       tenant.occupation = occupation || tenant.occupation;
       tenant.address = address || tenant.address;
-      tenant.rentAmount = rentAmount || tenant.rentAmount;
-      tenant.joiningDate = joiningDate ? new Date(joiningDate) : tenant.joiningDate;
-    }
-
-    if (assignedProperty) {
-      tenant.assignedProperty = assignedProperty;
-    }
-    if (assignedRoom) {
-      tenant.assignedRoom = assignedRoom;
-      tenant.joiningDate = joiningDate ? new Date(joiningDate) : new Date();
-
-      // Create prorated invoice
-      const room = await Room.findById(assignedRoom);
-      if (room) {
-        if (room.roomType === 'flat') {
-          const occupants = await Tenant.countDocuments({ assignedRoom: room._id });
-          if (occupants >= room.bedCapacity) {
-             throw new AppError('Flat has reached its maximum capacity', 400);
-          }
-        }
-        const defaultRent = room.roomType === 'flat'
-          ? Math.round(room.monthlyRent / (room.bedCapacity || 1))
-          : room.monthlyRent;
-        await createProratedInvoice(tenant._id.toString(), assignedProperty, assignedRoom, tenant.rentAmount || defaultRent, tenant.joiningDate);
-      }
-    }
-    if (assignedBed) {
-      // Check if bed is available
-      const bed = await Bed.findById(assignedBed);
-      if (!bed || (bed.isOccupied && bed.tenant?.toString() !== tenant._id.toString())) {
-        throw new AppError('The selected bed is already occupied or does not exist', 400);
-      }
-
-      tenant.assignedBed = assignedBed;
-      tenant.agreementStatus = 'pending';
-
-      // Update Bed status
-      bed.isOccupied = true;
-      bed.tenant = tenant._id;
-      await bed.save();
-
-      if (assignedRoom) {
-        // Update Room status
-        await updateRoomOccupancy(assignedRoom);
-      }
-    } else if (assignedRoom) {
-      const room = await Room.findById(assignedRoom);
-      if (room?.roomType === 'flat') {
-        tenant.agreementStatus = 'pending';
-        await updateRoomOccupancy(assignedRoom);
-      }
     }
 
     await tenant.save();
@@ -622,10 +561,6 @@ export const createTenantInvite = async (req: AuthenticatedRequest, res: Respons
       email, 
       sendMethod = 'email',
       whatsappNumber,
-      assignedProperty, 
-      assignedRoom, 
-      assignedBed, 
-      joiningDate, 
       ownerId: bodyOwnerId 
     } = req.body;
     const ownerId = req.user?.role === 'admin' && bodyOwnerId ? bodyOwnerId : req.user?.userId;
@@ -658,10 +593,10 @@ export const createTenantInvite = async (req: AuthenticatedRequest, res: Respons
       tokenHash,
       status: 'pending',
       expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 72),
-      assignedProperty: assignedProperty || null,
-      assignedRoom: assignedRoom || null,
-      assignedBed: assignedBed || null,
-      joiningDate: joiningDate ? new Date(joiningDate) : null
+      assignedProperty: null,
+      assignedRoom: null,
+      assignedBed: null,
+      joiningDate: null
     });
 
     const inviteUrl = `${getFrontendUrl(req)}/invite/${rawToken}`;
@@ -672,9 +607,9 @@ export const createTenantInvite = async (req: AuthenticatedRequest, res: Respons
         ownerName: String((req.user as any)?.fullName || 'Property Manager'),
         tenantEmail: targetEmail,
         inviteUrl,
-        propertyName: (invite.assignedProperty as any)?.propertyName || null,
-        roomNumber: (invite.assignedRoom as any)?.roomNumber || null,
-        bedNumber: (invite.assignedBed as any)?.bedNumber || null
+        propertyName: null,
+        roomNumber: null,
+        bedNumber: null
       });
 
       try {
@@ -791,40 +726,16 @@ export const acceptTenantInvite = async (req: Request, res: Response, next: Next
     tenant.emergencyContact = emergencyContact;
     tenant.occupation = occupation;
     tenant.address = address;
-    tenant.joiningDate = invite.joiningDate || new Date();
+    tenant.joiningDate = null;
+    tenant.assignedProperty = null;
+    tenant.assignedRoom = null;
+    tenant.assignedBed = null;
 
     tenant.verificationStatus = verificationStatus;
     tenant.riskLevel = riskLevel;
     tenant.tenantRating = tenantRating;
     tenant.creditScore = creditScore;
     tenant.previousOwnerFeedback = previousOwnerFeedback;
-
-    if (invite.assignedProperty) {
-      tenant.assignedProperty = invite.assignedProperty._id || invite.assignedProperty;
-    }
-    if (invite.assignedRoom) {
-      tenant.assignedRoom = invite.assignedRoom._id || invite.assignedRoom;
-    }
-
-    if (invite.assignedBed) {
-      const bedId = invite.assignedBed._id || invite.assignedBed;
-      const bed = await Bed.findById(bedId);
-      if (!bed) {
-        throw new AppError('The reserved bed does not exist', 404);
-      }
-      
-      // If the bed is occupied by someone else, throw error
-      if (bed.isOccupied && bed.tenant && bed.tenant.toString() !== tenant._id.toString()) {
-        throw new AppError('The reserved bed is no longer available', 400);
-      }
-
-      tenant.assignedBed = bedId;
-      tenant.agreementStatus = 'pending';
-
-      bed.isOccupied = true;
-      bed.tenant = tenant._id;
-      await bed.save();
-    }
 
     await tenant.save();
 
@@ -840,26 +751,6 @@ export const acceptTenantInvite = async (req: Request, res: Response, next: Next
       connection.isDeleted = false;
     }
     await connection.save();
-
-    if (invite.assignedRoom) {
-      await updateRoomOccupancy(invite.assignedRoom._id.toString());
-
-      const room = await Room.findById(invite.assignedRoom._id);
-      if (room && invite.assignedProperty) {
-        const defaultRent = room.roomType === 'flat'
-          ? Math.round(room.monthlyRent / (room.bedCapacity || 1))
-          : room.monthlyRent;
-        await createProratedInvoice(
-          tenant._id.toString(),
-          invite.assignedProperty._id.toString(),
-          invite.assignedRoom._id.toString(),
-          tenant.rentAmount || defaultRent,
-          tenant.joiningDate
-        );
-      }
-    }
-
-    await tenant.save();
 
     invite.status = 'accepted';
     invite.acceptedTenant = tenant._id;

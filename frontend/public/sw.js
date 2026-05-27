@@ -102,8 +102,6 @@ self.addEventListener('fetch', (event) => {
         }
 
         return response;
-      }).catch(() => {
-        // Fail silently or offline fallback
       });
     })
   );

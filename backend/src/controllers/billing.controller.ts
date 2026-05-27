@@ -27,6 +27,30 @@ const buildMockOrderResponse = (ownerId: string, amountDue: number) => {
   };
 };
 
+export const canAssignTenant = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const ownerId = req.user?.userId;
+    const owner = await User.findById(ownerId);
+    if (!owner) {
+      throw new AppError('Owner not found', 404);
+    }
+
+    const totalTenants = await TenantOwnerConnection.countDocuments({ owner: ownerId, isDeleted: false });
+    const paidLimit = (owner.paidBeds || 0) + 2;
+    const canAssign = totalTenants <= paidLimit;
+    const amountDue = Math.max(0, totalTenants - paidLimit) * 20;
+
+    return res.status(200).json({
+      canAssign,
+      currentLinked: totalTenants,
+      paidLimit,
+      amountDue
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getBedBillingStatus = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const ownerId = req.user?.userId;

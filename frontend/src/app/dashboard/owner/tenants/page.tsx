@@ -66,9 +66,6 @@ export default function TenantsPage() {
   const [joiningDate, setJoiningDate] = useState(getTodayDateString());
 
   // Allocation states
-  const [selectedPropertyId, setSelectedPropertyId] = useState('');
-  const [selectedRoomId, setSelectedRoomId] = useState('');
-  const [selectedBedId, setSelectedBedId] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const [payments, setPayments] = useState<any[]>([]);
@@ -172,9 +169,6 @@ export default function TenantsPage() {
         email: inviteMethod === 'email' ? resolvedEmail : '',
         sendMethod: inviteMethod,
         whatsappNumber: inviteMethod === 'whatsapp' ? inviteWhatsapp : '',
-        assignedProperty: selectedPropertyId || null,
-        assignedRoom: selectedRoomId || null,
-        assignedBed: selectedBedId || null,
         joiningDate: joiningDate || null
       });
 
@@ -402,51 +396,7 @@ export default function TenantsPage() {
     init();
   }, []);
 
-  // Fetch rooms dynamically when property is selected
-  useEffect(() => {
-    if (!selectedPropertyId) {
-      setRooms([]);
-      return;
-    }
-    const fetchRooms = async () => {
-      try {
-        const propDetail = await api.get(`/properties/${selectedPropertyId}`);
-        setRooms(propDetail.data.rooms || []);
-      } catch (err: any) {
-        showToast(err.response?.data?.message || 'Failed to fetch rooms', 'error');
-        console.error(err);
-      }
-    };
-    fetchRooms();
-  }, [selectedPropertyId, showToast]);
 
-  // Fetch beds dynamically when room is selected
-  useEffect(() => {
-    if (!selectedRoomId) {
-      setBeds([]);
-      return;
-    }
-    const activeRoom = rooms.find((r) => r._id === selectedRoomId);
-    if (activeRoom) {
-      const fetchBeds = async () => {
-        try {
-          const res = await api.get(`/properties/${selectedPropertyId}`);
-          if (res.data && res.data.beds) {
-            const vacantBeds = res.data.beds.filter(
-              (b: any) => b.room === selectedRoomId && !b.isOccupied
-            );
-            setBeds(vacantBeds);
-          } else {
-            setBeds([]);
-          }
-        } catch (err: any) {
-          showToast(err.response?.data?.message || 'Failed to fetch beds', 'error');
-          console.error(err);
-        }
-      };
-      fetchBeds();
-    }
-  }, [selectedRoomId, rooms, selectedPropertyId, showToast]);
 
   const handleAddTenant = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -464,13 +414,10 @@ export default function TenantsPage() {
         emergencyContact,
         occupation,
         address,
-        assignedProperty: selectedPropertyId || null,
-        assignedRoom: selectedRoomId || null,
-        assignedBed: selectedBedId || null,
         joiningDate: joiningDate || null
       });
 
-      showToast('Tenant registered and allocated successfully!', 'success');
+      showToast('Tenant registered successfully!', 'success');
       setIsAddModalOpen(false);
       resetForm();
       fetchTenants();
@@ -643,9 +590,7 @@ export default function TenantsPage() {
     setEmergencyContact('');
     setOccupation('');
     setAddress('');
-    setSelectedPropertyId('');
-    setSelectedRoomId('');
-    setSelectedBedId('');
+
     setWizardStep(1);
     setVerificationResult(null);
     setRegistrationMode('manual');
@@ -1563,78 +1508,6 @@ export default function TenantsPage() {
                     </div>
                   )}
 
-                  {/* Allocation Layout */}
-                  <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-4">
-                    <h4 className="text-xs font-bold uppercase text-slate-400">Space Allocation (Optional)</h4>
-
-                    <div>
-                      <label className="block text-xs font-bold mb-1 uppercase text-slate-500 dark:text-slate-400">Select Property</label>
-                      {properties.length === 0 ? (
-                        <div className="p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 rounded-xl text-xs text-amber-800 dark:text-amber-300 font-semibold">
-                          ⚠️ No properties registered. Please register a property first.
-                        </div>
-                      ) : (
-                        <select
-                          value={selectedPropertyId}
-                          onChange={(e) => {
-                            setSelectedPropertyId(e.target.value);
-                            setSelectedRoomId('');
-                            setSelectedBedId('');
-                          }}
-                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-sm dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-                        >
-                          <option value="">-- Choose Property --</option>
-                          {properties.map((p) => (
-                            <option key={p._id} value={p._id}>{p.propertyName}</option>
-                          ))}
-                        </select>
-                      )}
-                    </div>
-
-                    {selectedPropertyId && (
-                      <div>
-                        <label className="block text-xs font-bold mb-1 uppercase text-slate-500 dark:text-slate-400">Select Room</label>
-                        <select
-                          value={selectedRoomId}
-                          onChange={(e) => {
-                            setSelectedRoomId(e.target.value);
-                            setSelectedBedId('');
-                          }}
-                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-sm dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-                        >
-                          <option value="">-- Choose Room --</option>
-                          {rooms.map((r) => (
-                            <option key={r._id} value={r._id}>
-                              {r.roomNumber} (Rent: ₹{r.monthlyRent})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-
-                    {selectedRoomId && (
-                      <div>
-                        <label className="block text-xs font-bold mb-1 uppercase text-slate-500 dark:text-slate-400">Select Bed Space</label>
-                        <select
-                          value={selectedBedId}
-                          onChange={(e) => setSelectedBedId(e.target.value)}
-                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-sm dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-                        >
-                          <option value="">-- Choose Bed Space --</option>
-                          {beds.map((b) => (
-                            <option key={b._id} value={b._id}>{b.bedNumber}</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                  </div>
-
-                  {billingStatus && billingStatus.unpaidPersons > 0 && (selectedBedId || selectedRoomId) && (
-                    <div className="p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 rounded-xl text-xs text-amber-800 dark:text-amber-350 font-semibold">
-                      ⚠️ Allocation is locked due to {billingStatus.unpaidPersons} unpaid tenant licenses. Please purchase licenses on the Properties tab to assign occupants.
-                    </div>
-                  )}
-
                   {registrationMode === 'invite' ? (
                     <button
                       type="submit"
@@ -1659,7 +1532,7 @@ export default function TenantsPage() {
                       disabled={submitting}
                       className="w-full py-3 bg-primary hover:bg-primary-hover text-white rounded-xl text-xs font-bold shadow-md shadow-primary/20 disabled:opacity-50 mt-4 hover:scale-[1.02] transition-transform"
                     >
-                      {submitting ? 'Registering...' : 'Register and Allocate Space'}
+                      {submitting ? 'Registering...' : 'Register Tenant'}
                     </button>
                   )}
                 </form>
