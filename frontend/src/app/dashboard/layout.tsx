@@ -54,12 +54,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [showInstallBanner, setShowInstallBanner] = useState(false);
 
   useEffect(() => {
-    // Check if already installed or dismissed
-    const isDismissedOrInstalled = localStorage.getItem('pwa_installed') === 'true' ||
-      (typeof window !== 'undefined' && window.matchMedia('(display-mode: standalone)').matches);
-
-    if (isDismissedOrInstalled) return;
-
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);

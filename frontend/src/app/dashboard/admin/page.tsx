@@ -56,7 +56,7 @@ export default function AdminDashboardPage() {
         }
         (window as any).deferredPrompt = null;
       } else {
-        showToast('App is already installed or your browser does not support automatic PWA installation.', 'info');
+        showToast('To install, tap your browser menu (three dots) and select "Add to Home screen" or "Install app".', 'info');
       }
     } else if (os === 'ios' || os === 'mac') {
       setIsInstallModalOpen(true);
