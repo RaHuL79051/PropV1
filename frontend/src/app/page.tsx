@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { useAuthStore } from '../store/authStore';
-import { 
-  Building2, ShieldCheck, CreditCard, Wrench, FileText, 
+import {
+  Building2, ShieldCheck, CreditCard, Wrench, FileText,
   ArrowRight, Users, CheckCircle2, ChevronRight, Monitor
 } from 'lucide-react';
 
@@ -38,13 +38,13 @@ export default function LandingPage() {
               href={user?.role === 'admin' ? '/dashboard/admin' : '/dashboard/owner'}
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-sm font-semibold shadow-md shadow-primary/20 transition-all hover:scale-105"
             >
-              Go to Console
+              Go to Dashboard
               <ArrowRight className="w-4 h-4" />
             </Link>
           ) : (
             <>
-              <Link 
-                href="/login" 
+              <Link
+                href="/login"
                 className="text-sm font-semibold text-slate-700 dark:text-slate-300 hover:text-primary transition-colors"
               >
                 Sign In
