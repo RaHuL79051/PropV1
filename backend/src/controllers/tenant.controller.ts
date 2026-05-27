@@ -40,7 +40,10 @@ export const checkUnpaidPersonsLimit = async (ownerId: string) => {
   }
 };
 
-const getFrontendUrl = () => process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3000';
+const getFrontendUrl = (req?: Request) => {
+  const requestOrigin = req?.headers.origin?.toString().replace(/\/+$/, '');
+  return requestOrigin || process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3000';
+};
 
 const hashInviteToken = (token: string) => crypto.createHash('sha256').update(token).digest('hex');
 
@@ -646,7 +649,7 @@ export const createTenantInvite = async (req: AuthenticatedRequest, res: Respons
       joiningDate: joiningDate ? new Date(joiningDate) : null
     });
 
-    const inviteUrl = `${getFrontendUrl()}/invite/${rawToken}`;
+    const inviteUrl = `${getFrontendUrl(req)}/invite/${rawToken}`;
     const subject = 'Property Manager invitation to complete your tenant profile';
     const inviteEmail = buildTenantInviteEmail({
       ownerName: String((req.user as any)?.fullName || 'Property Manager'),
@@ -657,12 +660,18 @@ export const createTenantInvite = async (req: AuthenticatedRequest, res: Respons
       bedNumber: (invite.assignedBed as any)?.bedNumber || null
     });
 
-    await sendMail({
-      to: targetEmail,
-      subject,
-      text: inviteEmail.text,
-      html: inviteEmail.html
-    });
+    let emailSent = true;
+    try {
+      await sendMail({
+        to: targetEmail,
+        subject,
+        text: inviteEmail.text,
+        html: inviteEmail.html
+      });
+    } catch (mailError) {
+      emailSent = false;
+      console.error('[Invite] Failed to send invitation email:', mailError);
+    }
 
     return res.status(201).json({
       message: 'Invitation link generated successfully',
@@ -672,7 +681,8 @@ export const createTenantInvite = async (req: AuthenticatedRequest, res: Respons
         email: invite.email,
         expiresAt: invite.expiresAt,
         inviteUrl
-      }
+      },
+      emailSent
     });
   } catch (error) {
     next(error);
