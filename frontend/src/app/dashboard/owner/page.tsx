@@ -55,17 +55,22 @@ export default function OwnerDashboardPage() {
     const os = getDeviceOS();
     setInstallOS(os);
 
-    // Android and Windows: Try native install prompt first
-    const deferredPrompt = (window as any).deferredPrompt;
-    if (deferredPrompt && (os === 'android' || os === 'windows')) {
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      if (outcome === 'accepted') {
-        localStorage.setItem('pwa_installed', 'true');
+    if (os === 'android' || os === 'windows') {
+      const deferredPrompt = (window as any).deferredPrompt;
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') {
+          localStorage.setItem('pwa_installed', 'true');
+        }
+        (window as any).deferredPrompt = null;
+      } else {
+        showToast('App is already installed or your browser does not support automatic PWA installation.', 'info');
       }
-      (window as any).deferredPrompt = null;
-    } else {
+    } else if (os === 'ios' || os === 'mac') {
       setIsInstallModalOpen(true);
+    } else {
+      showToast('PWA installation is not supported on this device/browser.', 'info');
     }
   };
 
