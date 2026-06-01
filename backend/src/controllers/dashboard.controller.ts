@@ -21,45 +21,61 @@ export const getOwnerDashboardStats = async (req: AuthenticatedRequest, res: Res
       return res.status(401).json({ message: 'Authentication required' });
     }
 
-    // 1. Total Properties
-    const properties = await Property.find({ owner: ownerId });
+    // 1. Total Properties, connections, and expenses in parallel
+    const [properties, tenantConnections, expenses] = await Promise.all([
+      Property.find({ owner: ownerId }),
+      TenantOwnerConnection.find({ owner: ownerId, isDeleted: false }).select('tenant'),
+      Expense.find({ owner: ownerId })
+    ]);
+
     const propertyIds = properties.map(p => p._id);
+    const tenantIdList = tenantConnections.map(c => c.tenant);
     const totalProperties = properties.length;
 
-    // 2. Rooms and Beds
-    const rooms = await Room.find({ property: { $in: propertyIds } });
-    const roomIds = rooms.map(r => r._id);
-    const totalRooms = rooms.length;
+    // 2. Fetch rooms, active tenants, agreements, payments, maintenance requests, and feeds in parallel
+    const [
+      rooms,
+      activeTenants,
+      pendingAgreements,
+      activeAgreements,
+      paidPayments,
+      pendingPayments,
+      maintenanceRequests,
+      recentPayments,
+      recentMaintenance
+    ] = await Promise.all([
+      Room.find({ property: { $in: propertyIds } }),
+      Tenant.countDocuments({ _id: { $in: tenantIdList }, assignedBed: { $ne: null } }),
+      Agreement.countDocuments({ tenant: { $in: tenantIdList }, status: 'pending' }),
+      Agreement.countDocuments({ tenant: { $in: tenantIdList }, status: 'active' }),
+      Payment.find({ tenant: { $in: tenantIdList }, status: 'paid' }),
+      Payment.find({ tenant: { $in: tenantIdList }, status: { $in: ['unpaid', 'overdue'] } }),
+      MaintenanceRequest.find({ property: { $in: propertyIds } }),
+      Payment.find({ tenant: { $in: tenantIdList } })
+        .populate('tenant', 'fullName phone')
+        .populate('property', 'propertyName')
+        .populate('room', 'roomNumber')
+        .sort({ dueDate: -1 })
+        .limit(5),
+      MaintenanceRequest.find({ property: { $in: propertyIds } })
+        .populate('tenant', 'fullName')
+        .populate('property', 'propertyName')
+        .populate('room', 'roomNumber')
+        .sort({ createdAt: -1 })
+        .limit(5)
+    ]);
 
+    const totalRooms = rooms.length;
+    const roomIds = rooms.map(r => r._id);
+
+    // 3. Fetch beds based on room ids
     const beds = await Bed.find({ room: { $in: roomIds } });
     const totalBeds = beds.length;
     const occupiedBeds = beds.filter(b => b.isOccupied).length;
     const vacantBeds = totalBeds - occupiedBeds;
 
-    // 3. Active Tenants
-    const tenantConnections = await TenantOwnerConnection.find({ owner: ownerId, isDeleted: false }).select('tenant');
-    const tenantIdList = tenantConnections.map(c => c.tenant);
-    const activeTenants = await Tenant.countDocuments({ _id: { $in: tenantIdList }, assignedBed: { $ne: null } });
-
-    // 4. Agreements
-    const pendingAgreements = await Agreement.countDocuments({
-      tenant: { $in: tenantIdList },
-      status: 'pending'
-    });
-    
-    const activeAgreements = await Agreement.countDocuments({
-      tenant: { $in: tenantIdList },
-      status: 'active'
-    });
-
-    // 5. Total Revenue & Expenses
-    const paidPayments = await Payment.find({
-      tenant: { $in: tenantIdList },
-      status: 'paid'
-    });
+    // 4. Calculations
     const totalRevenue = paidPayments.reduce((sum, p) => sum + p.amount, 0);
-
-    const expenses = await Expense.find({ owner: ownerId });
     const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
 
     // Current Month Revenue and Expenses
@@ -67,35 +83,29 @@ export const getOwnerDashboardStats = async (req: AuthenticatedRequest, res: Res
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
 
-    const currentMonthPaidPayments = await Payment.find({
-      tenant: { $in: tenantIdList },
-      status: 'paid',
-      paymentDate: { $gte: startOfMonth, $lte: endOfMonth }
-    });
-    const monthlyRevenue = currentMonthPaidPayments.reduce((sum, p) => sum + p.amount, 0);
+    const monthlyRevenue = paidPayments
+      .filter(p => {
+        if (!p.paymentDate) return false;
+        const pDate = new Date(p.paymentDate);
+        return pDate >= startOfMonth && pDate <= endOfMonth;
+      })
+      .reduce((sum, p) => sum + p.amount, 0);
 
-    const currentMonthExpenses = await Expense.find({
-      owner: ownerId,
-      date: { $gte: startOfMonth, $lte: endOfMonth }
-    });
-    const monthlyExpenses = currentMonthExpenses.reduce((sum, e) => sum + e.amount, 0);
+    const monthlyExpenses = expenses
+      .filter(e => {
+        if (!e.date) return false;
+        const eDate = new Date(e.date);
+        return eDate >= startOfMonth && eDate <= endOfMonth;
+      })
+      .reduce((sum, e) => sum + e.amount, 0);
 
-    // 6. Pending / Unpaid Payments
-    const pendingPayments = await Payment.find({
-      tenant: { $in: tenantIdList },
-      status: { $in: ['unpaid', 'overdue'] }
-    });
     const pendingPaymentsCount = pendingPayments.length;
     const pendingPaymentsAmount = pendingPayments.reduce((sum, p) => sum + p.amount, 0);
 
-    // 7. Maintenance Requests
-    const maintenanceRequests = await MaintenanceRequest.find({
-      property: { $in: propertyIds }
-    });
     const pendingMaintenanceCount = maintenanceRequests.filter(r => r.status === 'pending' || r.status === 'in_progress').length;
     const totalMaintenanceCount = maintenanceRequests.length;
 
-    // 8. Expense Category Breakdown
+    // 5. Expense Category Breakdown
     const categoryTotals: { [key: string]: number } = {};
     expenses.forEach(e => {
       categoryTotals[e.category] = (categoryTotals[e.category] || 0) + e.amount;
@@ -105,22 +115,7 @@ export const getOwnerDashboardStats = async (req: AuthenticatedRequest, res: Res
       amount: categoryTotals[cat]
     }));
 
-    // 9. Recent Feeds
-    const recentPayments = await Payment.find({ tenant: { $in: tenantIdList } })
-      .populate('tenant', 'fullName phone')
-      .populate('property', 'propertyName')
-      .populate('room', 'roomNumber')
-      .sort({ dueDate: -1 })
-      .limit(5);
-
-    const recentMaintenance = await MaintenanceRequest.find({ property: { $in: propertyIds } })
-      .populate('tenant', 'fullName')
-      .populate('property', 'propertyName')
-      .populate('room', 'roomNumber')
-      .sort({ createdAt: -1 })
-      .limit(5);
-
-    // 10. Real Analytics Chart (Last 6 Months Revenue vs Expenses vs Profit)
+    // 6. Real Analytics Chart (Last 6 Months Revenue vs Expenses vs Profit) calculated in memory
     const monthlyChartData = [];
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     
@@ -135,18 +130,21 @@ export const getOwnerDashboardStats = async (req: AuthenticatedRequest, res: Res
       const startOfM = new Date(year, monthIndex, 1);
       const endOfM = new Date(year, monthIndex + 1, 0, 23, 59, 59, 999);
 
-      const paidInMonth = await Payment.find({
-        tenant: { $in: tenantIdList },
-        status: 'paid',
-        paymentDate: { $gte: startOfM, $lte: endOfM }
-      });
-      const rev = paidInMonth.reduce((sum, p) => sum + p.amount, 0);
+      const rev = paidPayments
+        .filter(p => {
+          if (!p.paymentDate) return false;
+          const pDate = new Date(p.paymentDate);
+          return pDate >= startOfM && pDate <= endOfM;
+        })
+        .reduce((sum, p) => sum + p.amount, 0);
 
-      const expInMonth = await Expense.find({
-        owner: ownerId,
-        date: { $gte: startOfM, $lte: endOfM }
-      });
-      const exp = expInMonth.reduce((sum, e) => sum + e.amount, 0);
+      const exp = expenses
+        .filter(e => {
+          if (!e.date) return false;
+          const eDate = new Date(e.date);
+          return eDate >= startOfM && eDate <= endOfM;
+        })
+        .reduce((sum, e) => sum + e.amount, 0);
 
       monthlyChartData.push({
         month: monthName,
@@ -165,8 +163,8 @@ export const getOwnerDashboardStats = async (req: AuthenticatedRequest, res: Res
       activeTenants,
       pendingAgreements,
       activeAgreements,
-      monthlyRevenue, // Keep key name for frontend compatibility
-      totalExpenses,   // Keep key name for frontend compatibility
+      monthlyRevenue,
+      totalExpenses,
       netProfit: totalRevenue - totalExpenses,
       occupancyRate: totalBeds > 0 ? Math.round((occupiedBeds / totalBeds) * 100) : 0,
       monthlyChartData,
@@ -187,55 +185,64 @@ export const getOwnerDashboardStats = async (req: AuthenticatedRequest, res: Res
 
 export const getAdminDashboardStats = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    // Global Platform Stats
-    const totalOwners = await User.countDocuments({ role: 'owner' });
-    const totalProperties = await Property.countDocuments();
-    const totalRooms = await Room.countDocuments();
-    const totalBeds = await Bed.countDocuments();
-    const occupiedBeds = await Bed.countDocuments({ isOccupied: true });
-    
-    const activeTenants = await Tenant.countDocuments({ assignedBed: { $ne: null } });
-    const activeAgreements = await Agreement.countDocuments({ status: 'active' });
+    // Fetch all stats in parallel
+    const [
+      totalOwners,
+      totalProperties,
+      totalRooms,
+      totalBeds,
+      occupiedBeds,
+      activeTenants,
+      activeAgreements,
+      allPaidPayments,
+      allExpenses,
+      fraudAlerts,
+      recentLogs,
+      totalMaintenance,
+      pendingMaintenance,
+      pendingPayments,
+      recentProperties,
+      recentMaintenance
+    ] = await Promise.all([
+      User.countDocuments({ role: 'owner' }),
+      Property.countDocuments(),
+      Room.countDocuments(),
+      Bed.countDocuments(),
+      Bed.countDocuments({ isOccupied: true }),
+      Tenant.countDocuments({ assignedBed: { $ne: null } }),
+      Agreement.countDocuments({ status: 'active' }),
+      Payment.find({ status: 'paid' }),
+      Expense.find(),
+      VerificationLog.countDocuments({ riskLevel: 'high' }),
+      VerificationLog.find()
+        .populate('requester', 'fullName email')
+        .sort({ createdAt: -1 })
+        .limit(6),
+      MaintenanceRequest.countDocuments(),
+      MaintenanceRequest.countDocuments({ status: { $in: ['pending', 'in_progress'] } }),
+      Payment.find({ status: { $in: ['unpaid', 'overdue'] } }),
+      Property.find()
+        .populate('owner', 'fullName email')
+        .sort({ createdAt: -1 })
+        .limit(5),
+      MaintenanceRequest.find()
+        .populate('tenant', 'fullName')
+        .populate('property', 'propertyName')
+        .sort({ createdAt: -1 })
+        .limit(5)
+    ]);
 
     // Total Revenue Platform Wide
-    const allPaidPayments = await Payment.find({ status: 'paid' });
     const totalRevenue = allPaidPayments.reduce((sum, p) => sum + p.amount, 0);
 
     // Platform Expenses
-    const allExpenses = await Expense.find();
     const totalExpenses = allExpenses.reduce((sum, e) => sum + e.amount, 0);
 
-    // Verification Alerts and logs
-    const fraudAlerts = await VerificationLog.countDocuments({ riskLevel: 'high' });
-
-    const recentLogs = await VerificationLog.find()
-      .populate('requester', 'fullName email')
-      .sort({ createdAt: -1 })
-      .limit(6);
-
-    // Platform-wide maintenance stats
-    const totalMaintenance = await MaintenanceRequest.countDocuments();
-    const pendingMaintenance = await MaintenanceRequest.countDocuments({ status: { $in: ['pending', 'in_progress'] } });
-
     // Platform-wide pending payments
-    const pendingPayments = await Payment.find({ status: { $in: ['unpaid', 'overdue'] } });
     const pendingPaymentsCount = pendingPayments.length;
     const pendingPaymentsAmount = pendingPayments.reduce((sum, p) => sum + p.amount, 0);
 
-    // Recent properties registered
-    const recentProperties = await Property.find()
-      .populate('owner', 'fullName email')
-      .sort({ createdAt: -1 })
-      .limit(5);
-
-    // Recent maintenance requests
-    const recentMaintenance = await MaintenanceRequest.find()
-      .populate('tenant', 'fullName')
-      .populate('property', 'propertyName')
-      .sort({ createdAt: -1 })
-      .limit(5);
-
-    // Real monthly chart data platform-wide (last 6 months)
+    // Real monthly chart data platform-wide (last 6 months) calculated in memory
     const monthlyChartData = [];
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     
@@ -250,16 +257,21 @@ export const getAdminDashboardStats = async (req: AuthenticatedRequest, res: Res
       const startOfM = new Date(year, monthIndex, 1);
       const endOfM = new Date(year, monthIndex + 1, 0, 23, 59, 59, 999);
 
-      const paidInMonth = await Payment.find({
-        status: 'paid',
-        paymentDate: { $gte: startOfM, $lte: endOfM }
-      });
-      const rev = paidInMonth.reduce((sum, p) => sum + p.amount, 0);
+      const rev = allPaidPayments
+        .filter(p => {
+          if (!p.paymentDate) return false;
+          const pDate = new Date(p.paymentDate);
+          return pDate >= startOfM && pDate <= endOfM;
+        })
+        .reduce((sum, p) => sum + p.amount, 0);
 
-      const expInMonth = await Expense.find({
-        date: { $gte: startOfM, $lte: endOfM }
-      });
-      const exp = expInMonth.reduce((sum, e) => sum + e.amount, 0);
+      const exp = allExpenses
+        .filter(e => {
+          if (!e.date) return false;
+          const eDate = new Date(e.date);
+          return eDate >= startOfM && eDate <= endOfM;
+        })
+        .reduce((sum, e) => sum + e.amount, 0);
 
       monthlyChartData.push({
         month: monthName,
