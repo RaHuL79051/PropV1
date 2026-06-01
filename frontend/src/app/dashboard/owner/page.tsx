@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import api from '../../../lib/api';
 import { useToastStore } from '../../../store/toastStore';
-import { 
+import {
   Home, Users, CreditCard, Percent, ArrowUpRight, Wrench, Clock, FileText, CheckCircle2,
   TrendingUp, Calendar, AlertTriangle, Loader2, Plus, Wallet, Download, X, Coins, ChevronRight,
   ArrowRight, ShieldCheck, ShoppingBag, Eye
@@ -219,7 +219,7 @@ export default function OwnerDashboardPage() {
             <div>
               <h4 className="text-sm font-bold text-amber-800 dark:text-amber-200">Action Required: Bed Licensing Pending</h4>
               <p className="text-xs text-amber-700 dark:text-amber-300/80 mt-1">
-                You have {billingStatus.unpaidBeds} unpaid bed licenses (Total: {billingStatus.totalBeds}, Paid: {billingStatus.paidBeds}). 
+                You have {billingStatus.unpaidBeds} unpaid bed licenses (Total: {billingStatus.totalBeds}, Paid: {billingStatus.paidBeds}).
                 Please pay <span className="font-extrabold">₹{billingStatus.amountDue}</span> (₹30/bed) to activate tenant allocations.
               </p>
             </div>
@@ -372,27 +372,27 @@ export default function OwnerDashboardPage() {
               <AreaChart data={stats.monthlyChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#2563EB" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#2563EB" stopOpacity={0}/>
+                    <stop offset="5%" stopColor="#2563EB" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#2563EB" stopOpacity={0} />
                   </linearGradient>
                   <linearGradient id="colorExpenses" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#EF4444" stopOpacity={0.2}/>
-                    <stop offset="95%" stopColor="#EF4444" stopOpacity={0}/>
+                    <stop offset="5%" stopColor="#EF4444" stopOpacity={0.2} />
+                    <stop offset="95%" stopColor="#EF4444" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" className="dark:hidden" />
                 <CartesianGrid strokeDasharray="3 3" stroke="#334155" className="hidden dark:block" />
                 <XAxis dataKey="month" stroke="#94A3B8" fontSize={11} fontWeight={600} />
                 <YAxis stroke="#94A3B8" fontSize={11} fontWeight={600} />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: '#1E293B', 
-                    border: 'none', 
-                    borderRadius: '12px', 
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#1E293B',
+                    border: 'none',
+                    borderRadius: '12px',
                     color: '#F8FAFC',
                     fontSize: '12px',
                     boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'
-                  }} 
+                  }}
                 />
                 <Area type="monotone" dataKey="revenue" stroke="#2563EB" strokeWidth={3} fillOpacity={1} fill="url(#colorRevenue)" name="Revenue" />
                 <Area type="monotone" dataKey="expenses" stroke="#EF4444" strokeWidth={3} fillOpacity={1} fill="url(#colorExpenses)" name="Expenses" />
@@ -430,8 +430,8 @@ export default function OwnerDashboardPage() {
                       </span>
                     </div>
                     <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
-                      <div 
-                        className={`h-full rounded-full transition-all duration-500 ${theme.color.replace('text-', 'bg-')}`} 
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${theme.color.replace('text-', 'bg-')}`}
                         style={{ width: `${percentage}%` }}
                       />
                     </div>
@@ -520,11 +520,10 @@ export default function OwnerDashboardPage() {
               <div className="flex gap-4">
                 <button
                   onClick={() => setActiveTab('payments')}
-                  className={`text-sm font-bold pb-2 relative transition-colors ${
-                    activeTab === 'payments' 
-                      ? 'text-primary' 
+                  className={`text-sm font-bold pb-2 relative transition-colors ${activeTab === 'payments'
+                      ? 'text-primary'
                       : 'text-slate-450 hover:text-slate-700 dark:hover:text-slate-200'
-                  }`}
+                    }`}
                 >
                   Recent Invoices
                   {activeTab === 'payments' && (
@@ -533,11 +532,10 @@ export default function OwnerDashboardPage() {
                 </button>
                 <button
                   onClick={() => setActiveTab('maintenance')}
-                  className={`text-sm font-bold pb-2 relative transition-colors ${
-                    activeTab === 'maintenance' 
-                      ? 'text-primary' 
+                  className={`text-sm font-bold pb-2 relative transition-colors ${activeTab === 'maintenance'
+                      ? 'text-primary'
                       : 'text-slate-450 hover:text-slate-700 dark:hover:text-slate-200'
-                  }`}
+                    }`}
                 >
                   Maintenance Reports
                   {activeTab === 'maintenance' && (
@@ -545,7 +543,7 @@ export default function OwnerDashboardPage() {
                   )}
                 </button>
               </div>
-              <a 
+              <a
                 href={activeTab === 'payments' ? '/dashboard/owner/payments' : '/dashboard/owner/maintenance'}
                 className="text-xs text-slate-400 hover:text-primary flex items-center gap-1 font-semibold transition-colors"
               >
@@ -584,13 +582,12 @@ export default function OwnerDashboardPage() {
                             {new Date(p.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                           </td>
                           <td className="py-3">
-                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
-                              p.status === 'paid'
+                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${p.status === 'paid'
                                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/50'
                                 : p.status === 'overdue'
-                                ? 'bg-rose-50 text-rose-750 border-rose-200 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-900/50'
-                                : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/50'
-                            }`}>
+                                  ? 'bg-rose-50 text-rose-750 border-rose-200 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-900/50'
+                                  : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/50'
+                              }`}>
                               {p.status}
                             </span>
                           </td>
@@ -609,20 +606,19 @@ export default function OwnerDashboardPage() {
               <div className="space-y-3">
                 {recentMaintenance.length > 0 ? (
                   recentMaintenance.map((m) => (
-                    <div 
+                    <div
                       key={m._id}
                       className="p-3.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 flex items-center justify-between text-xs transition-all hover:bg-slate-100/50 dark:hover:bg-slate-900/50"
                     >
                       <div className="space-y-1">
                         <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                           {m.title}
-                          <span className={`px-1.5 py-0.2 rounded text-[8px] font-bold uppercase ${
-                            m.priority === 'high'
+                          <span className={`px-1.5 py-0.2 rounded text-[8px] font-bold uppercase ${m.priority === 'high'
                               ? 'bg-rose-100 text-rose-700 border border-rose-200 dark:bg-rose-950/30 dark:text-rose-450 dark:border-rose-900/50'
                               : m.priority === 'medium'
-                              ? 'bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-950/30 dark:text-amber-450 dark:border-amber-900/50'
-                              : 'bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-450 dark:border-emerald-900/50'
-                          }`}>
+                                ? 'bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-950/30 dark:text-amber-450 dark:border-amber-900/50'
+                                : 'bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-450 dark:border-emerald-900/50'
+                            }`}>
                             {m.priority}
                           </span>
                         </div>
@@ -635,13 +631,12 @@ export default function OwnerDashboardPage() {
                       </div>
 
                       <div className="flex flex-col items-end gap-1.5">
-                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border ${
-                          m.status === 'resolved'
+                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border ${m.status === 'resolved'
                             ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-455'
                             : m.status === 'in_progress'
-                            ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/20 dark:text-blue-455'
-                            : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/20 dark:text-amber-455'
-                        }`}>
+                              ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/20 dark:text-blue-455'
+                              : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/20 dark:text-amber-455'
+                          }`}>
                           {m.status.replace('_', ' ')}
                         </span>
                         <span className="text-[9px] text-slate-400">
@@ -699,8 +694,8 @@ export default function OwnerDashboardPage() {
 
           <div className="pt-4 border-t border-slate-100 dark:border-slate-800 mt-4 flex items-center justify-between text-xs text-slate-400">
             <span>Last sync: Just now</span>
-            <button 
-              onClick={() => window.location.reload()} 
+            <button
+              onClick={() => window.location.reload()}
               className="text-primary hover:underline font-bold"
             >
               Refresh
