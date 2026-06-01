@@ -392,7 +392,7 @@ export default function OwnerDashboardPage() {
                     color: '#F8FAFC',
                     fontSize: '12px',
                     boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'
-                  }}
+                  }} 
                 />
                 <Area type="monotone" dataKey="revenue" stroke="#2563EB" strokeWidth={3} fillOpacity={1} fill="url(#colorRevenue)" name="Revenue" />
                 <Area type="monotone" dataKey="expenses" stroke="#EF4444" strokeWidth={3} fillOpacity={1} fill="url(#colorExpenses)" name="Expenses" />
