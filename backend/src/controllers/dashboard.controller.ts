@@ -1,4 +1,5 @@
 import { Response, NextFunction } from 'express';
+import mongoose from 'mongoose';
 import Property from '../models/Property.js';
 import Room from '../models/Room.js';
 import Bed from '../models/Bed.js';
@@ -8,12 +9,17 @@ import Payment from '../models/Payment.js';
 import User from '../models/User.js';
 import VerificationLog from '../models/VerificationLog.js';
 import TenantOwnerConnection from '../models/TenantOwnerConnection.js';
+import MaintenanceRequest from '../models/MaintenanceRequest.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import Expense from '../models/Expense.js';
 
 export const getOwnerDashboardStats = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const ownerId = req.user?.userId;
+
+    if (!ownerId) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
 
     // 1. Total Properties
     const properties = await Property.find({ owner: ownerId });
@@ -40,26 +46,115 @@ export const getOwnerDashboardStats = async (req: AuthenticatedRequest, res: Res
       tenant: { $in: tenantIdList },
       status: 'pending'
     });
+    
+    const activeAgreements = await Agreement.countDocuments({
+      tenant: { $in: tenantIdList },
+      status: 'active'
+    });
 
-    // 5. Monthly Revenue (Total Paid)
+    // 5. Total Revenue & Expenses
     const paidPayments = await Payment.find({
       tenant: { $in: tenantIdList },
       status: 'paid'
     });
-    const monthlyRevenue = paidPayments.reduce((sum, p) => sum + p.amount, 0);
+    const totalRevenue = paidPayments.reduce((sum, p) => sum + p.amount, 0);
 
-    // 5.1 Total Expenses
     const expenses = await Expense.find({ owner: ownerId });
     const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
 
-    // 6. Analytics Chart (Last 6 Months Revenue)
-    const monthlyChartData = [
-      { month: 'Jan', revenue: Math.round(monthlyRevenue * 0.7) },
-      { month: 'Feb', revenue: Math.round(monthlyRevenue * 0.8) },
-      { month: 'Mar', revenue: Math.round(monthlyRevenue * 0.9) },
-      { month: 'Apr', revenue: Math.round(monthlyRevenue * 0.95) },
-      { month: 'May', revenue: monthlyRevenue }
-    ];
+    // Current Month Revenue and Expenses
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+    const currentMonthPaidPayments = await Payment.find({
+      tenant: { $in: tenantIdList },
+      status: 'paid',
+      paymentDate: { $gte: startOfMonth, $lte: endOfMonth }
+    });
+    const monthlyRevenue = currentMonthPaidPayments.reduce((sum, p) => sum + p.amount, 0);
+
+    const currentMonthExpenses = await Expense.find({
+      owner: ownerId,
+      date: { $gte: startOfMonth, $lte: endOfMonth }
+    });
+    const monthlyExpenses = currentMonthExpenses.reduce((sum, e) => sum + e.amount, 0);
+
+    // 6. Pending / Unpaid Payments
+    const pendingPayments = await Payment.find({
+      tenant: { $in: tenantIdList },
+      status: { $in: ['unpaid', 'overdue'] }
+    });
+    const pendingPaymentsCount = pendingPayments.length;
+    const pendingPaymentsAmount = pendingPayments.reduce((sum, p) => sum + p.amount, 0);
+
+    // 7. Maintenance Requests
+    const maintenanceRequests = await MaintenanceRequest.find({
+      property: { $in: propertyIds }
+    });
+    const pendingMaintenanceCount = maintenanceRequests.filter(r => r.status === 'pending' || r.status === 'in_progress').length;
+    const totalMaintenanceCount = maintenanceRequests.length;
+
+    // 8. Expense Category Breakdown
+    const categoryTotals: { [key: string]: number } = {};
+    expenses.forEach(e => {
+      categoryTotals[e.category] = (categoryTotals[e.category] || 0) + e.amount;
+    });
+    const expenseBreakdown = Object.keys(categoryTotals).map(cat => ({
+      category: cat,
+      amount: categoryTotals[cat]
+    }));
+
+    // 9. Recent Feeds
+    const recentPayments = await Payment.find({ tenant: { $in: tenantIdList } })
+      .populate('tenant', 'fullName phone')
+      .populate('property', 'propertyName')
+      .populate('room', 'roomNumber')
+      .sort({ dueDate: -1 })
+      .limit(5);
+
+    const recentMaintenance = await MaintenanceRequest.find({ property: { $in: propertyIds } })
+      .populate('tenant', 'fullName')
+      .populate('property', 'propertyName')
+      .populate('room', 'roomNumber')
+      .sort({ createdAt: -1 })
+      .limit(5);
+
+    // 10. Real Analytics Chart (Last 6 Months Revenue vs Expenses vs Profit)
+    const monthlyChartData = [];
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(1);
+      d.setMonth(d.getMonth() - i);
+      const year = d.getFullYear();
+      const monthIndex = d.getMonth();
+      const monthName = monthNames[monthIndex];
+
+      const startOfM = new Date(year, monthIndex, 1);
+      const endOfM = new Date(year, monthIndex + 1, 0, 23, 59, 59, 999);
+
+      const paidInMonth = await Payment.find({
+        tenant: { $in: tenantIdList },
+        status: 'paid',
+        paymentDate: { $gte: startOfM, $lte: endOfM }
+      });
+      const rev = paidInMonth.reduce((sum, p) => sum + p.amount, 0);
+
+      const expInMonth = await Expense.find({
+        owner: ownerId,
+        date: { $gte: startOfM, $lte: endOfM }
+      });
+      const exp = expInMonth.reduce((sum, e) => sum + e.amount, 0);
+
+      monthlyChartData.push({
+        month: monthName,
+        revenue: rev,
+        expenses: exp,
+        profit: rev - exp
+      });
+    }
 
     return res.status(200).json({
       totalProperties,
@@ -69,11 +164,21 @@ export const getOwnerDashboardStats = async (req: AuthenticatedRequest, res: Res
       vacantBeds,
       activeTenants,
       pendingAgreements,
-      monthlyRevenue,
-      totalExpenses,
-      netProfit: monthlyRevenue - totalExpenses,
+      activeAgreements,
+      monthlyRevenue, // Keep key name for frontend compatibility
+      totalExpenses,   // Keep key name for frontend compatibility
+      netProfit: totalRevenue - totalExpenses,
       occupancyRate: totalBeds > 0 ? Math.round((occupiedBeds / totalBeds) * 100) : 0,
-      monthlyChartData
+      monthlyChartData,
+      monthlyExpenses,
+      totalRevenue,
+      pendingPaymentsCount,
+      pendingPaymentsAmount,
+      pendingMaintenanceCount,
+      totalMaintenanceCount,
+      expenseBreakdown,
+      recentPayments,
+      recentMaintenance
     });
   } catch (error) {
     next(error);
@@ -96,6 +201,10 @@ export const getAdminDashboardStats = async (req: AuthenticatedRequest, res: Res
     const allPaidPayments = await Payment.find({ status: 'paid' });
     const totalRevenue = allPaidPayments.reduce((sum, p) => sum + p.amount, 0);
 
+    // Platform Expenses
+    const allExpenses = await Expense.find();
+    const totalExpenses = allExpenses.reduce((sum, e) => sum + e.amount, 0);
+
     // Verification Alerts and logs
     const fraudAlerts = await VerificationLog.countDocuments({ riskLevel: 'high' });
 
@@ -104,13 +213,61 @@ export const getAdminDashboardStats = async (req: AuthenticatedRequest, res: Res
       .sort({ createdAt: -1 })
       .limit(6);
 
-    const monthlyChartData = [
-      { month: 'Jan', revenue: Math.round(totalRevenue * 0.6) },
-      { month: 'Feb', revenue: Math.round(totalRevenue * 0.75) },
-      { month: 'Mar', revenue: Math.round(totalRevenue * 0.8) },
-      { month: 'Apr', revenue: Math.round(totalRevenue * 0.9) },
-      { month: 'May', revenue: totalRevenue }
-    ];
+    // Platform-wide maintenance stats
+    const totalMaintenance = await MaintenanceRequest.countDocuments();
+    const pendingMaintenance = await MaintenanceRequest.countDocuments({ status: { $in: ['pending', 'in_progress'] } });
+
+    // Platform-wide pending payments
+    const pendingPayments = await Payment.find({ status: { $in: ['unpaid', 'overdue'] } });
+    const pendingPaymentsCount = pendingPayments.length;
+    const pendingPaymentsAmount = pendingPayments.reduce((sum, p) => sum + p.amount, 0);
+
+    // Recent properties registered
+    const recentProperties = await Property.find()
+      .populate('owner', 'fullName email')
+      .sort({ createdAt: -1 })
+      .limit(5);
+
+    // Recent maintenance requests
+    const recentMaintenance = await MaintenanceRequest.find()
+      .populate('tenant', 'fullName')
+      .populate('property', 'propertyName')
+      .sort({ createdAt: -1 })
+      .limit(5);
+
+    // Real monthly chart data platform-wide (last 6 months)
+    const monthlyChartData = [];
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(1);
+      d.setMonth(d.getMonth() - i);
+      const year = d.getFullYear();
+      const monthIndex = d.getMonth();
+      const monthName = monthNames[monthIndex];
+
+      const startOfM = new Date(year, monthIndex, 1);
+      const endOfM = new Date(year, monthIndex + 1, 0, 23, 59, 59, 999);
+
+      const paidInMonth = await Payment.find({
+        status: 'paid',
+        paymentDate: { $gte: startOfM, $lte: endOfM }
+      });
+      const rev = paidInMonth.reduce((sum, p) => sum + p.amount, 0);
+
+      const expInMonth = await Expense.find({
+        date: { $gte: startOfM, $lte: endOfM }
+      });
+      const exp = expInMonth.reduce((sum, e) => sum + e.amount, 0);
+
+      monthlyChartData.push({
+        month: monthName,
+        revenue: rev,
+        expenses: exp,
+        profit: rev - exp
+      });
+    }
 
     return res.status(200).json({
       totalOwners,
@@ -121,11 +278,20 @@ export const getAdminDashboardStats = async (req: AuthenticatedRequest, res: Res
       activeTenants,
       activeAgreements,
       totalRevenue,
+      totalExpenses,
+      netProfit: totalRevenue - totalExpenses,
       fraudAlerts,
       recentLogs,
-      monthlyChartData
+      monthlyChartData,
+      totalMaintenance,
+      pendingMaintenance,
+      pendingPaymentsCount,
+      pendingPaymentsAmount,
+      recentProperties,
+      recentMaintenance
     });
   } catch (error) {
     next(error);
   }
 };
+

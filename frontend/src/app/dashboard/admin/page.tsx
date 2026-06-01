@@ -4,10 +4,10 @@ import { useEffect, useState } from 'react';
 import api from '../../../lib/api';
 import { useToastStore } from '../../../store/toastStore';
 import { 
-  Users, Building, ShieldCheck, CreditCard, ShieldAlert, 
-  Percent, TrendingUp, Calendar, Loader2, ArrowUpRight, FileText, Download, X
+  Users, Building, ShieldCheck, CreditCard, ShieldAlert, Wrench, RefreshCw, Home,
+  Percent, TrendingUp, Calendar, Loader2, ArrowUpRight, FileText, Download, X, ArrowRight
 } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { VerificationLog } from '../../../types';
 
 interface AdminStats {
@@ -19,9 +19,31 @@ interface AdminStats {
   activeTenants: number;
   activeAgreements: number;
   totalRevenue: number;
+  totalExpenses: number;
+  netProfit: number;
   fraudAlerts: number;
   recentLogs: VerificationLog[];
-  monthlyChartData: Array<{ month: string; revenue: number }>;
+  monthlyChartData: Array<{ month: string; revenue: number; expenses: number; profit: number }>;
+  totalMaintenance: number;
+  pendingMaintenance: number;
+  pendingPaymentsCount: number;
+  pendingPaymentsAmount: number;
+  recentProperties: Array<{
+    _id: string;
+    propertyName: string;
+    address: string;
+    owner?: { fullName: string; email: string };
+    createdAt: string;
+  }>;
+  recentMaintenance: Array<{
+    _id: string;
+    title: string;
+    priority: 'low' | 'medium' | 'high';
+    status: 'pending' | 'in_progress' | 'resolved';
+    createdAt: string;
+    tenant?: { fullName: string };
+    property?: { propertyName: string };
+  }>;
 }
 
 export default function AdminDashboardPage() {
@@ -118,13 +140,18 @@ export default function AdminDashboardPage() {
 
   if (!stats) return <p className="text-center text-slate-500 py-10">Failed to load statistics.</p>;
 
+  // Fallbacks for data items
+  const recentProperties = stats.recentProperties || [];
+  const recentMaintenance = stats.recentMaintenance || [];
+
   return (
     <div className="space-y-8">
       {/* Welcome Banner */}
-      <div className="p-6 rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 text-white shadow-xl relative overflow-hidden flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="p-6 rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-800 text-white shadow-xl relative overflow-hidden flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="absolute inset-0 bg-primary/10 mix-blend-overlay" />
+        <div className="absolute -left-16 -top-16 w-48 h-48 rounded-full bg-primary/10 blur-xl animate-pulse" />
         <div className="relative z-10">
-          <h2 className="text-2xl font-extrabold">System Administration Console</h2>
+          <h2 className="text-2xl font-extrabold tracking-tight">System Administration Console</h2>
           <p className="text-slate-300 text-sm mt-1">Global platform metrics, registered property managers, and security audit verifications.</p>
         </div>
         <button
@@ -137,7 +164,8 @@ export default function AdminDashboardPage() {
 
       {/* Grid Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm">
+        {/* Owners Card */}
+        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm hover:shadow-md transition-shadow">
           <div className="flex justify-between items-start">
             <span className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Property Owners</span>
             <div className="p-2 rounded-lg bg-primary/10 text-primary">
@@ -146,11 +174,12 @@ export default function AdminDashboardPage() {
           </div>
           <div className="mt-4">
             <h3 className="text-3xl font-extrabold text-slate-900 dark:text-white">{stats.totalOwners}</h3>
-            <span className="text-xs text-slate-400 font-semibold block mt-1">{stats.totalProperties} properties managed</span>
+            <span className="text-xs text-slate-400 font-semibold block mt-1">{stats.totalProperties} Properties registered</span>
           </div>
         </div>
 
-        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm">
+        {/* Occupancy Card */}
+        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm hover:shadow-md transition-shadow">
           <div className="flex justify-between items-start">
             <span className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Occupancy Rate</span>
             <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400">
@@ -159,51 +188,126 @@ export default function AdminDashboardPage() {
           </div>
           <div className="mt-4">
             <h3 className="text-3xl font-extrabold text-slate-900 dark:text-white">{stats.occupancyRate}%</h3>
-            <span className="text-xs text-slate-400 font-semibold block mt-1">{stats.activeTenants} active tenants</span>
+            <span className="text-xs text-slate-400 font-semibold block mt-1">{stats.activeTenants} Active tenants on site</span>
           </div>
         </div>
 
-        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm">
+        {/* Revenue Card */}
+        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm hover:shadow-md transition-shadow">
           <div className="flex justify-between items-start">
-            <span className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Platform Revenue</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Global Revenue</span>
             <div className="p-2 rounded-lg bg-accent/10 text-accent">
               <CreditCard className="w-5 h-5" />
             </div>
           </div>
           <div className="mt-4">
-            <h3 className="text-3xl font-extrabold text-slate-900 dark:text-white">₹{stats.totalRevenue.toLocaleString()}</h3>
-            <span className="text-xs text-slate-400 font-semibold block mt-1">{stats.activeAgreements} active leases</span>
+            <h3 className="text-3xl font-extrabold text-slate-900 dark:text-white">₹{stats.totalRevenue.toLocaleString('en-IN')}</h3>
+            <span className="text-xs text-slate-400 font-semibold block mt-1">{stats.activeAgreements} Active lease contracts</span>
           </div>
         </div>
 
-        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm">
+        {/* Expenses / Net Profit Card */}
+        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm hover:shadow-md transition-shadow">
           <div className="flex justify-between items-start">
-            <span className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Security Alerts</span>
-            <div className="p-2 rounded-lg bg-rose-50 dark:bg-rose-950 text-rose-600 dark:text-rose-400">
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Platform Profit</span>
+            <div className="p-2 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400">
+              <TrendingUp className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="mt-4">
+            <h3 className="text-3xl font-extrabold text-slate-900 dark:text-white">₹{(stats.netProfit || 0).toLocaleString('en-IN')}</h3>
+            <span className="text-xs text-slate-400 font-semibold block mt-1">Total expenses: ₹{(stats.totalExpenses || 0).toLocaleString('en-IN')}</span>
+          </div>
+        </div>
+
+        {/* Pending Maintenance requests */}
+        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex justify-between items-start">
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Maintenance tickets</span>
+            <div className="p-2 rounded-lg bg-purple-50 dark:bg-purple-950 text-purple-600 dark:text-purple-400">
+              <Wrench className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="mt-4">
+            <h3 className="text-3xl font-extrabold text-slate-900 dark:text-white">{stats.pendingMaintenance || 0}</h3>
+            <span className="text-xs text-slate-400 font-semibold block mt-1">Pending / In-progress requests</span>
+          </div>
+        </div>
+
+        {/* Pending payments */}
+        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex justify-between items-start">
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Pending payments</span>
+            <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400">
+              <FileText className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="mt-4">
+            <h3 className="text-3xl font-extrabold text-slate-900 dark:text-white">₹{(stats.pendingPaymentsAmount || 0).toLocaleString('en-IN')}</h3>
+            <span className="text-xs text-slate-400 font-semibold block mt-1">{stats.pendingPaymentsCount || 0} Unpaid invoices</span>
+          </div>
+        </div>
+
+        {/* High Risk Logs */}
+        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex justify-between items-start">
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Security alerts</span>
+            <div className="p-2 rounded-lg bg-rose-50 dark:bg-rose-950 text-rose-600 dark:text-rose-455">
               <ShieldAlert className="w-5 h-5" />
             </div>
           </div>
           <div className="mt-4">
-            <h3 className="text-3xl font-extrabold text-rose-500 dark:text-rose-400">{stats.fraudAlerts}</h3>
-            <span className="text-xs text-slate-400 font-semibold block mt-1">High risk logs tracked</span>
+            <h3 className="text-3xl font-extrabold text-rose-600 dark:text-rose-400">{stats.fraudAlerts}</h3>
+            <span className="text-xs text-slate-400 font-semibold block mt-1">High risk tenant scans tracked</span>
+          </div>
+        </div>
+
+        {/* Beds Capacity */}
+        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex justify-between items-start">
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Rooms & Beds</span>
+            <div className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-350">
+              <Building className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="mt-4">
+            <h3 className="text-3xl font-extrabold text-slate-900 dark:text-white">{stats.totalBeds}</h3>
+            <span className="text-xs text-slate-400 font-semibold block mt-1">{stats.totalRooms} Rooms registered</span>
           </div>
         </div>
       </div>
 
-      {/* Revenue Performance & Recent Verifications */}
+      {/* Charts section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm lg:col-span-2">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h4 className="text-base font-bold text-slate-900 dark:text-white">Global Revenue Growth</h4>
-              <span className="text-xs text-slate-400">Platform billing logs across all properties</span>
+              <h4 className="text-base font-bold text-slate-900 dark:text-white">Platform Financial Growth</h4>
+              <span className="text-xs text-slate-400">Total cleared revenue vs expenses across all registered properties</span>
             </div>
-            <TrendingUp className="w-5 h-5 text-primary" />
+            <div className="flex gap-2">
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-500">
+                <span className="w-2.5 h-2.5 rounded-full bg-blue-500" /> Revenue
+              </span>
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-500">
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500" /> Expenses
+              </span>
+            </div>
           </div>
 
-          <div className="h-64 w-full">
+          <div className="h-68 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={stats.monthlyChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <AreaChart data={stats.monthlyChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorPlatformRev" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#3B82F6" stopOpacity={0}/>
+                  </linearGradient>
+                  <linearGradient id="colorPlatformExp" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#EF4444" stopOpacity={0.2}/>
+                    <stop offset="95%" stopColor="#EF4444" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" className="dark:hidden" />
                 <CartesianGrid strokeDasharray="3 3" stroke="#334155" className="hidden dark:block" />
                 <XAxis dataKey="month" stroke="#94A3B8" fontSize={11} fontWeight={600} />
@@ -212,46 +316,143 @@ export default function AdminDashboardPage() {
                   contentStyle={{ 
                     backgroundColor: '#1E293B', 
                     border: 'none', 
-                    borderRadius: '8px', 
+                    borderRadius: '12px', 
                     color: '#F8FAFC',
-                    fontSize: '12px'
+                    fontSize: '12px',
+                    boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'
                   }} 
                 />
-                <Line type="monotone" dataKey="revenue" stroke="#3B82F6" strokeWidth={3} activeDot={{ r: 6 }} />
-              </LineChart>
+                <Area type="monotone" dataKey="revenue" stroke="#3B82F6" strokeWidth={3} fillOpacity={1} fill="url(#colorPlatformRev)" name="Revenue" />
+                <Area type="monotone" dataKey="expenses" stroke="#EF4444" strokeWidth={3} fillOpacity={1} fill="url(#colorPlatformExp)" name="Expenses" />
+                <Area type="monotone" dataKey="profit" stroke="#10B981" strokeWidth={2} strokeDasharray="4 4" fill="none" name="Net Profit" />
+              </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        {/* Recent Verification Logs Feed */}
-        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm space-y-6">
-          <div className="flex items-center justify-between">
-            <h4 className="text-base font-bold text-slate-900 dark:text-white">Audit Live Feed</h4>
-            <Calendar className="w-5 h-5 text-accent" />
+        {/* Live audit verification feed */}
+        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm flex flex-col justify-between">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="text-base font-bold text-slate-900 dark:text-white">Audit Live Feed</h4>
+              <Calendar className="w-5 h-5 text-accent" />
+            </div>
+            <span className="text-xs text-slate-400 block">Real-time background verification scans log</span>
+
+            <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1 scrollbar-thin">
+              {stats.recentLogs.map((log) => (
+                <div 
+                  key={log._id}
+                  className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 flex items-center justify-between text-xs"
+                >
+                  <div>
+                    <div className="font-bold text-slate-900 dark:text-white truncate max-w-[120px]">{log.result?.fullName || 'Identity Verification'}</div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">By: {log.requester?.fullName}</div>
+                  </div>
+
+                  <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded border ${
+                    log.riskLevel === 'low'
+                      ? 'border-emerald-300 text-emerald-600 bg-emerald-55/10 dark:border-emerald-900 dark:bg-emerald-950/20'
+                      : log.riskLevel === 'medium'
+                      ? 'border-amber-300 text-amber-600 bg-amber-55/10 dark:border-amber-900 dark:bg-amber-950/20'
+                      : 'border-rose-300 text-rose-650 bg-rose-55/10 dark:border-rose-900 dark:bg-rose-950/20'
+                  }`}>
+                    {log.riskLevel}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
 
-          <div className="space-y-4 max-h-[250px] overflow-y-auto pr-1">
-            {stats.recentLogs.map((log) => (
-              <div 
-                key={log._id}
-                className="p-3.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex items-center justify-between text-xs"
-              >
-                <div>
-                  <div className="font-bold text-slate-900 dark:text-white">{log.result?.fullName || 'Verification'}</div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">By: {log.requester?.fullName}</div>
-                </div>
+          <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center text-xs">
+            <span className="text-slate-400">Security scans active</span>
+            <a href="/dashboard/admin/logs" className="text-primary hover:underline font-bold flex items-center gap-1">
+              All logs <ArrowRight className="w-3.5 h-3.5" />
+            </a>
+          </div>
+        </div>
+      </div>
 
-                <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-md border ${
-                  log.riskLevel === 'low'
-                    ? 'border-emerald-300 text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20'
-                    : log.riskLevel === 'medium'
-                    ? 'border-amber-300 text-amber-600 bg-amber-50 dark:bg-amber-950/20'
-                    : 'border-rose-300 text-rose-600 bg-rose-50 dark:bg-rose-950/20'
-                }`}>
-                  {log.riskLevel}
-                </span>
-              </div>
-            ))}
+      {/* Platform Activity Feed (New registrations & Maintenance tickets) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Newly Registered Properties */}
+        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm">
+          <div className="flex items-center justify-between mb-4 border-b border-slate-100 dark:border-slate-800 pb-3">
+            <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Building className="w-4 h-4 text-primary" /> Newly Registered Properties
+            </h4>
+            <a href="/dashboard/admin/properties" className="text-xs text-slate-400 hover:text-primary transition-colors">
+              Manage
+            </a>
+          </div>
+
+          <div className="space-y-3">
+            {recentProperties.length > 0 ? (
+              recentProperties.map((p) => (
+                <div key={p._id} className="flex justify-between items-center p-3 rounded-xl border border-slate-50 dark:border-slate-850 bg-slate-55/50 dark:bg-slate-950/20 text-xs">
+                  <div>
+                    <div className="font-bold text-slate-900 dark:text-white">{p.propertyName}</div>
+                    <div className="text-[10px] text-slate-400">{p.address}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-semibold text-slate-700 dark:text-slate-300">{p.owner?.fullName || 'Unknown Owner'}</div>
+                    <div className="text-[9px] text-slate-450">{new Date(p.createdAt).toLocaleDateString('en-IN')}</div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-8 text-xs text-slate-400">No properties registered yet.</div>
+            )}
+          </div>
+        </div>
+
+        {/* Global Maintenance tickets */}
+        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm">
+          <div className="flex items-center justify-between mb-4 border-b border-slate-100 dark:border-slate-800 pb-3">
+            <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Wrench className="w-4 h-4 text-primary" /> Recent Maintenance Requests
+            </h4>
+            <a href="/dashboard/admin/maintenance" className="text-xs text-slate-400 hover:text-primary transition-colors">
+              Dispatch
+            </a>
+          </div>
+
+          <div className="space-y-3">
+            {recentMaintenance.length > 0 ? (
+              recentMaintenance.map((m) => (
+                <div key={m._id} className="flex justify-between items-center p-3 rounded-xl border border-slate-50 dark:border-slate-850 bg-slate-55/50 dark:bg-slate-950/20 text-xs">
+                  <div className="space-y-0.5">
+                    <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                      {m.title}
+                      <span className={`px-1 rounded text-[8px] font-extrabold uppercase border ${
+                        m.priority === 'high'
+                          ? 'border-rose-200 text-rose-600 bg-rose-50 dark:border-rose-900/50 dark:bg-rose-950/20'
+                          : m.priority === 'medium'
+                          ? 'border-amber-200 text-amber-600 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/20'
+                          : 'border-emerald-200 text-emerald-600 bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-950/20'
+                      }`}>
+                        {m.priority}
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-slate-400">Unit: {m.property?.propertyName || 'N/A'}</div>
+                  </div>
+                  <div className="text-right space-y-1">
+                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border ${
+                      m.status === 'resolved'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-250'
+                        : m.status === 'in_progress'
+                        ? 'bg-blue-50 text-blue-750 border-blue-250'
+                        : 'bg-amber-50 text-amber-700 border-amber-250'
+                    }`}>
+                      {m.status.replace('_', ' ')}
+                    </span>
+                    <div className="text-[9px] text-slate-450">{new Date(m.createdAt).toLocaleDateString('en-IN')}</div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-8 text-xs text-slate-400">No maintenance tickets reported yet.</div>
+            )}
           </div>
         </div>
       </div>
