@@ -73,8 +73,9 @@ export default function PropertiesPage() {
   } | null>(null);
   const [unassignedTenants, setUnassignedTenants] = useState<any[]>([]);
   const [selectedTenantToAssign, setSelectedTenantToAssign] = useState('');
+  const [assignCustomRent, setAssignCustomRent] = useState<number | ''>('');
   const [assignMode, setAssignMode] = useState<'existing' | 'new'>('existing');
-  
+
   const [canAssignDetails, setCanAssignDetails] = useState<{
     canAssign: boolean;
     currentLinked: number;
@@ -86,6 +87,13 @@ export default function PropertiesPage() {
   // Unassign Tenant modal states
   const [isUnassignModalOpen, setIsUnassignModalOpen] = useState(false);
   const [tenantToUnassign, setTenantToUnassign] = useState<any>(null);
+  const [unassignMode, setUnassignMode] = useState<'unassign' | 'checkout'>('unassign');
+  const [checkoutRating, setCheckoutRating] = useState<number>(5);
+  const [checkoutFeedback, setCheckoutFeedback] = useState<string>('');
+  const [relocateImmediately, setRelocateImmediately] = useState(false);
+  const [relocatePropertyId, setRelocatePropertyId] = useState('');
+  const [relocateRoomId, setRelocateRoomId] = useState('');
+  const [relocateBedId, setRelocateBedId] = useState('');
 
   // Delete warning popup modal states
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -98,6 +106,7 @@ export default function PropertiesPage() {
 
   // New tenant wizard states inside properties page
   const [assignAadhaar, setAssignAadhaar] = useState('');
+  const [assignPanNumber, setAssignPanNumber] = useState('');
   const [assignAadhaarVerifying, setAssignAadhaarVerifying] = useState(false);
   const [assignVerificationResult, setAssignVerificationResult] = useState<any>(null);
   const [assignRegMode, setAssignRegMode] = useState<'manual' | 'invite'>('manual');
@@ -113,6 +122,13 @@ export default function PropertiesPage() {
   const [assignInviteSending, setAssignInviteSending] = useState(false);
   const [assignSubmitting, setAssignSubmitting] = useState(false);
 
+  // Search states for properties assignment
+  const [assignSearchAadhaar, setAssignSearchAadhaar] = useState('');
+  const [assignSearchPan, setAssignSearchPan] = useState('');
+  const [assignSearchPhone, setAssignSearchPhone] = useState('');
+  const [assignSearchName, setAssignSearchName] = useState('');
+  const [assignSearchOperator, setAssignSearchOperator] = useState<'or' | 'and'>('or');
+
   // Reactivate connection confirmation states
   const [isReactivateModalOpen, setIsReactivateModalOpen] = useState(false);
   const [reactivateAadhaar, setReactivateAadhaar] = useState('');
@@ -122,7 +138,12 @@ export default function PropertiesPage() {
     try {
       const res = await api.get('/tenants');
       const allTenants = res.data;
-      const unassigned = allTenants.filter((t: any) => !t.assignedProperty && !t.assignedRoom && !t.assignedBed);
+      const unassigned = allTenants.filter((t: any) =>
+        !t.assignedProperty &&
+        !t.assignedRoom &&
+        !t.assignedBed &&
+        t.verificationStatus === 'verified'
+      );
       setUnassignedTenants(unassigned);
     } catch (err) {
       console.error('Failed to fetch unassigned tenants', err);
@@ -138,7 +159,8 @@ export default function PropertiesPage() {
       await api.put(`/tenants/${selectedTenantToAssign}`, {
         assignedProperty: assigningContext.propertyId,
         assignedRoom: assigningContext.roomId,
-        assignedBed: assigningContext.bedId
+        assignedBed: assigningContext.bedId,
+        ...(assignCustomRent !== '' && { rentAmount: assignCustomRent })
       });
       showToast('Tenant assigned successfully!', 'success');
       setIsAssignModalOpen(false);
@@ -156,14 +178,45 @@ export default function PropertiesPage() {
   };
 
   const handleAssignVerifyAadhaar = async () => {
-    if (!assignAadhaar || assignAadhaar.length !== 12 || !/^\d+$/.test(assignAadhaar)) {
+    const cleanAadhaar = assignSearchAadhaar.trim();
+    const cleanPan = assignSearchPan.trim().toUpperCase();
+    const cleanPhone = assignSearchPhone.trim();
+    const cleanName = assignSearchName.trim();
+
+    if (!cleanAadhaar && !cleanPan && !cleanPhone && !cleanName) {
+      showToast('Please enter at least one search query field', 'error');
+      return;
+    }
+
+    if (cleanAadhaar && (cleanAadhaar.length !== 12 || isNaN(Number(cleanAadhaar)))) {
       showToast('Aadhaar number must be exactly 12 digits', 'error');
+      return;
+    }
+
+    if (cleanPan && cleanPan.length !== 10) {
+      showToast('PAN card number must be exactly 10 characters', 'error');
+      return;
+    }
+
+    if (cleanPhone && (cleanPhone.length !== 10 || isNaN(Number(cleanPhone)))) {
+      showToast('Phone number must be exactly 10 digits', 'error');
+      return;
+    }
+
+    if (cleanName && cleanName.length < 2) {
+      showToast('Name must be at least 2 characters', 'error');
       return;
     }
 
     setAssignAadhaarVerifying(true);
     try {
-      const res = await api.post('/verification/verify', { aadhaarNumber: assignAadhaar });
+      const res = await api.post('/verification/verify', {
+        aadhaarNumber: cleanAadhaar,
+        panNumber: cleanPan,
+        phone: cleanPhone,
+        fullName: cleanName,
+        operator: assignSearchOperator
+      });
 
       if (res.data.connectionStatus === 'active') {
         showToast('Tenant is already active in your registry', 'error');
@@ -172,7 +225,7 @@ export default function PropertiesPage() {
       }
 
       if (res.data.connectionStatus === 'inactive') {
-        setReactivateAadhaar(assignAadhaar);
+        setReactivateAadhaar(res.data.prefill.aadhaarNumber || cleanAadhaar);
         setIsReactivateModalOpen(true);
         setAssignVerificationResult(null);
         return;
@@ -182,8 +235,10 @@ export default function PropertiesPage() {
 
       const { prefill } = res.data;
       setAssignFullName(prefill.fullName || '');
+      setAssignAadhaar(prefill.aadhaarNumber || cleanAadhaar || '');
+      setAssignPanNumber(prefill.panNumber || cleanPan || '');
       setAssignEmail(prefill.email || '');
-      setAssignPhone(prefill.phone || '');
+      setAssignPhone(prefill.phone || cleanPhone || '');
       setAssignEmergency(prefill.emergencyContact || '');
       setAssignOccupation(prefill.occupation || '');
       setAssignAddress(prefill.address || '');
@@ -195,9 +250,9 @@ export default function PropertiesPage() {
         setAssignRegMode('manual');
       }
 
-      showToast('Aadhaar verification report retrieved successfully', 'success');
+      showToast('Tenant verification report retrieved successfully', 'success');
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to retrieve Aadhaar verification report', 'error');
+      showToast(err.response?.data?.message || 'Failed to retrieve verification report', 'error');
     } finally {
       setAssignAadhaarVerifying(false);
     }
@@ -237,6 +292,7 @@ export default function PropertiesPage() {
       await api.post('/tenants', {
         fullName: assignFullName,
         aadhaarNumber: assignAadhaar,
+        panNumber: assignPanNumber,
         email: assignEmail || null,
         phone: assignPhone,
         emergencyContact: assignEmergency,
@@ -280,6 +336,7 @@ export default function PropertiesPage() {
     try {
       const res = await api.post('/tenants/invites', {
         aadhaarNumber: assignAadhaar,
+        panNumber: assignPanNumber,
         email: resolvedEmail,
         assignedProperty: assigningContext.propertyId,
         assignedRoom: assigningContext.roomId,
@@ -303,6 +360,7 @@ export default function PropertiesPage() {
 
   const resetAssignForm = () => {
     setAssignAadhaar('');
+    setAssignPanNumber('');
     setAssignVerificationResult(null);
     setAssignRegMode('manual');
     setAssignFullName('');
@@ -316,6 +374,13 @@ export default function PropertiesPage() {
     setAssignInviteUrl('');
     setAssignMode('existing');
     setSelectedTenantToAssign('');
+    setAssignCustomRent('');
+
+    setAssignSearchAadhaar('');
+    setAssignSearchPan('');
+    setAssignSearchPhone('');
+    setAssignSearchName('');
+    setAssignSearchOperator('or');
   };
   const [submitting, setSubmitting] = useState(false);
 
@@ -325,7 +390,7 @@ export default function PropertiesPage() {
       const res = await api.get('/payments/licensing/can-assign');
       const data = res.data;
       setCanAssignDetails(data);
-      
+
       if (!data.canAssign) {
         setAssigningContext(context);
         setIsLicensingModalOpen(true);
@@ -333,6 +398,7 @@ export default function PropertiesPage() {
         setAssigningContext(context);
         setSelectedTenantToAssign('');
         setAssignMode('existing');
+        setAssignCustomRent(context.monthlyRent || '');
         await fetchUnassignedTenants();
         setIsAssignModalOpen(true);
       }
@@ -343,7 +409,15 @@ export default function PropertiesPage() {
 
   // Add Property form
   const [propertyName, setPropertyName] = useState('');
-  const [address, setAddress] = useState('');
+  const [addrPincode, setAddrPincode] = useState('');
+  const [addrFlatNo, setAddrFlatNo] = useState('');
+  const [addrArea, setAddrArea] = useState('');
+  const [addrLandmark, setAddrLandmark] = useState('');
+  const [addrCity, setAddrCity] = useState('');
+  const [addrState, setAddrState] = useState('');
+  const [pincodeCities, setPincodeCities] = useState<string[]>([]);
+  const [pincodeLoading, setPincodeLoading] = useState(false);
+  const [pincodeError, setPincodeError] = useState('');
   const [description, setDescription] = useState('');
   const [totalRooms, setTotalRooms] = useState(0);
   const [propertyRoomType, setPropertyRoomType] = useState<'flat' | 'pg'>('pg');
@@ -354,18 +428,31 @@ export default function PropertiesPage() {
   const [bedCapacity, setBedCapacity] = useState(1);
   const [monthlyRent, setMonthlyRent] = useState(8000);
   const [roomType, setRoomType] = useState<'flat' | 'pg'>('pg');
+  // Room filter states
+  const [roomFlatCategory, setRoomFlatCategory] = useState('');
+  const [roomPropertyType, setRoomPropertyType] = useState<string[]>([]);
+  const [roomPreferredTenant, setRoomPreferredTenant] = useState<string[]>([]);
+  const [roomFurnishedType, setRoomFurnishedType] = useState('');
 
   // Room management — expandable row equivalent
   const [propertyRooms, setPropertyRooms] = useState<Record<string, Room[]>>({});
 
-  // Inline edit state per room
+  // Room edit state
   const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
+  const [editingRoom, setEditingRoom] = useState<any | null>(null);
+  const [isRoomEditModalOpen, setIsRoomEditModalOpen] = useState(false);
   const [editRent, setEditRent] = useState<number>(0);
   const [editBedCapacity, setEditBedCapacity] = useState<number>(1);
+  const [editFlatCategory, setEditFlatCategory] = useState('');
+  const [editPropertyType, setEditPropertyType] = useState<string[]>([]);
+  const [editPreferredTenant, setEditPreferredTenant] = useState<string[]>([]);
+  const [editFurnishedType, setEditFurnishedType] = useState('');
   const [savingRoomId, setSavingRoomId] = useState<string | null>(null);
 
-  // Inline edit state per tenant rent
+  // Tenant rent edit state
   const [editingRentTenantId, setEditingRentTenantId] = useState<string | null>(null);
+  const [editingRentTenant, setEditingRentTenant] = useState<any | null>(null);
+  const [isTenantRentModalOpen, setIsTenantRentModalOpen] = useState(false);
   const [editRentAmount, setEditRentAmount] = useState<number>(0);
   const [savingRentTenantId, setSavingRentTenantId] = useState<string | null>(null);
 
@@ -480,8 +567,20 @@ export default function PropertiesPage() {
 
   const handleStartEditRoom = (room: any) => {
     setEditingRoomId(room._id);
+    setEditingRoom(room);
     setEditRent(room.monthlyRent);
     setEditBedCapacity(room.bedCapacity);
+    setEditFlatCategory(room.flatCategory || '');
+    setEditPropertyType(room.propertyType || []);
+    setEditPreferredTenant(room.preferredTenant || []);
+    setEditFurnishedType(room.furnishedType || '');
+    setIsRoomEditModalOpen(true);
+  };
+
+  const handleCloseRoomEdit = () => {
+    setEditingRoomId(null);
+    setEditingRoom(null);
+    setIsRoomEditModalOpen(false);
   };
 
   const handleSaveRoom = async (roomId: string, propId: string) => {
@@ -490,9 +589,13 @@ export default function PropertiesPage() {
       await api.put(`/properties/rooms/${roomId}`, {
         monthlyRent: editRent,
         bedCapacity: editBedCapacity,
+        flatCategory: editFlatCategory || undefined,
+        propertyType: editPropertyType.length ? editPropertyType : undefined,
+        preferredTenant: editPreferredTenant.length ? editPreferredTenant : undefined,
+        furnishedType: editFurnishedType || undefined,
       });
       showToast('Room updated successfully!', 'success');
-      setEditingRoomId(null);
+      handleCloseRoomEdit();
       fetchRoomsForProperty(propId);
       fetchBillingStatus();
     } catch (err: any) {
@@ -502,12 +605,25 @@ export default function PropertiesPage() {
     }
   };
 
+  const handleStartEditTenantRent = (tenant: any) => {
+    setEditingRentTenantId(tenant._id);
+    setEditingRentTenant(tenant);
+    setEditRentAmount(tenant.rentAmount !== null && tenant.rentAmount !== undefined ? tenant.rentAmount : selectedRoom.monthlyRent);
+    setIsTenantRentModalOpen(true);
+  };
+
+  const handleCloseTenantRentEdit = () => {
+    setEditingRentTenantId(null);
+    setEditingRentTenant(null);
+    setIsTenantRentModalOpen(false);
+  };
+
   const handleSaveTenantRent = async (tenantId: string) => {
     setSavingRentTenantId(tenantId);
     try {
       await api.put(`/tenants/${tenantId}`, { rentAmount: editRentAmount });
       showToast('Tenant rent adjusted successfully!', 'success');
-      setEditingRentTenantId(null);
+      handleCloseTenantRentEdit();
       fetchProperties();
       if (selectedProperty) {
         await fetchRoomsForProperty(selectedProperty._id);
@@ -599,27 +715,89 @@ export default function PropertiesPage() {
     }
   };
 
+  const handleRelocatePropertyChange = async (propId: string) => {
+    setRelocatePropertyId(propId);
+    setRelocateRoomId('');
+    setRelocateBedId('');
+    if (propId && !propertyRooms[propId]) {
+      await fetchRoomsForProperty(propId);
+    }
+  };
+
+  const closeUnassignModal = () => {
+    setIsUnassignModalOpen(false);
+    setTenantToUnassign(null);
+    setUnassignMode('unassign');
+    setCheckoutRating(5);
+    setCheckoutFeedback('');
+    setRelocateImmediately(false);
+    setRelocatePropertyId('');
+    setRelocateRoomId('');
+    setRelocateBedId('');
+  };
+
   const handleUnassignTenant = async () => {
     if (!tenantToUnassign) return;
     setSubmitting(true);
     try {
-      await api.put(`/tenants/${tenantToUnassign._id}`, {
-        assignedProperty: null,
-        assignedRoom: null,
-        assignedBed: null
-      });
-      showToast('Tenant unassigned successfully', 'success');
-      setIsUnassignModalOpen(false);
+      if (unassignMode === 'checkout') {
+        if (!checkoutFeedback.trim()) {
+          showToast('Feedback description is required for checking out', 'error');
+          setSubmitting(false);
+          return;
+        }
+        await api.post(`/tenants/${tenantToUnassign._id}/checkout`, {
+          rating: checkoutRating,
+          feedback: checkoutFeedback
+        });
+        showToast('Tenant checked out and reviewed successfully', 'success');
+      } else if (relocateImmediately) {
+        if (!relocatePropertyId || !relocateRoomId) {
+          showToast('Please select property and room for relocation.', 'error');
+          setSubmitting(false);
+          return;
+        }
+        const selectedRoom = (propertyRooms[relocatePropertyId] || []).find((r: any) => r._id === relocateRoomId);
+        let finalBedId = relocateBedId;
+        if (selectedRoom?.roomType === 'flat') {
+          const vacantBeds = selectedRoom.beds?.filter((b: any) => !b.isOccupied) || [];
+          if (vacantBeds.length === 0) {
+            showToast('No vacant spots in this flat.', 'error');
+            setSubmitting(false);
+            return;
+          }
+          finalBedId = vacantBeds[0]._id;
+        } else {
+          if (!finalBedId) {
+            showToast('Please select a bed for relocation in PG room.', 'error');
+            setSubmitting(false);
+            return;
+          }
+        }
+
+        await api.put(`/tenants/${tenantToUnassign._id}`, {
+          assignedProperty: relocatePropertyId,
+          assignedRoom: relocateRoomId,
+          assignedBed: finalBedId
+        });
+        showToast('Tenant relocated successfully', 'success');
+      } else {
+        await api.put(`/tenants/${tenantToUnassign._id}`, {
+          assignedProperty: null,
+          assignedRoom: null,
+          assignedBed: null
+        });
+        showToast('Tenant unassigned successfully', 'success');
+      }
+      closeUnassignModal();
       fetchProperties();
       if (selectedProperty) {
-        const event = new Event('refresh');
         setTimeout(() => fetchRoomsForProperty(selectedProperty._id), 200);
       }
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to unassign tenant', 'error');
+      showToast(err.response?.data?.message || 'Action failed', 'error');
     } finally {
       setSubmitting(false);
-      setTenantToUnassign(null);
     }
   };
 
@@ -670,21 +848,57 @@ export default function PropertiesPage() {
     }
   };
 
+  // Pincode API lookup
+  const handlePincodeLookup = async (pincode: string) => {
+    setAddrPincode(pincode);
+    setPincodeError('');
+    setPincodeCities([]);
+    setAddrCity('');
+    setAddrState('');
+    if (pincode.length !== 6) return;
+    setPincodeLoading(true);
+    try {
+      const res = await fetch(`https://api.postalpincode.in/pincode/${pincode}`);
+      const data = await res.json();
+      if (data?.[0]?.Status === 'Success' && data[0].PostOffice?.length > 0) {
+        const offices = data[0].PostOffice;
+        const state = offices[0].State || '';
+        const cities = [...new Set(offices.map((o: any) => o.Name))] as string[];
+        setAddrState(state);
+        setPincodeCities(cities);
+        if (cities.length === 1) setAddrCity(cities[0]);
+      } else {
+        setPincodeError('Invalid pincode or no data found');
+      }
+    } catch {
+      setPincodeError('Failed to fetch pincode data');
+    } finally {
+      setPincodeLoading(false);
+    }
+  };
+
   const handleAddProperty = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!propertyName || !address) { showToast('Name and address are required', 'error'); return; }
+    if (!propertyName || !addrPincode || !addrCity || !addrState) { showToast('Name, Pincode, City and State are required', 'error'); return; }
     setSubmitting(true);
     try {
       await api.post('/properties', {
         propertyName,
-        address,
+        address: {
+          pincode: addrPincode,
+          flatNo: addrFlatNo,
+          area: addrArea,
+          landmark: addrLandmark,
+          city: addrCity,
+          state: addrState
+        },
         description,
         totalRooms,
         roomType: propertyRoomType
       });
       showToast('Property created successfully!', 'success');
       setIsAddModalOpen(false);
-      setPropertyName(''); setAddress(''); setDescription(''); setTotalRooms(0); setPropertyRoomType('pg');
+      setPropertyName(''); setAddrPincode(''); setAddrFlatNo(''); setAddrArea(''); setAddrLandmark(''); setAddrCity(''); setAddrState(''); setPincodeCities([]); setDescription(''); setTotalRooms(0); setPropertyRoomType('pg');
       fetchProperties(); fetchBillingStatus();
     } catch (err: any) {
       showToast(err.response?.data?.message || 'Failed to create property', 'error');
@@ -698,15 +912,21 @@ export default function PropertiesPage() {
     if (!selectedPropertyId || !roomNumber) { showToast('Room number is required', 'error'); return; }
     setSubmitting(true);
     try {
-      await api.post(`/properties/${selectedPropertyId}/rooms`, {
+      const roomPayload: any = {
         roomNumber,
         bedCapacity,
         monthlyRent,
         roomType
-      });
+      };
+      if (roomFlatCategory) roomPayload.flatCategory = roomFlatCategory;
+      if (roomPropertyType.length) roomPayload.propertyType = roomPropertyType;
+      if (roomPreferredTenant.length) roomPayload.preferredTenant = roomPreferredTenant;
+      if (roomFurnishedType) roomPayload.furnishedType = roomFurnishedType;
+      await api.post(`/properties/${selectedPropertyId}/rooms`, roomPayload);
       showToast('Room added successfully!', 'success');
       setIsAddRoomModalOpen(false);
       setRoomNumber(''); setBedCapacity(1); setMonthlyRent(8000); setRoomType('pg');
+      setRoomFlatCategory(''); setRoomPropertyType([]); setRoomPreferredTenant([]); setRoomFurnishedType('');
       fetchProperties(); fetchBillingStatus();
       if (selectedProperty?._id === selectedPropertyId) {
         fetchRoomsForProperty(selectedPropertyId);
@@ -823,45 +1043,102 @@ export default function PropertiesPage() {
   if (isLoading) {
     return (
       <div className="h-[60vh] flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center">
+            <Loader2 className="w-7 h-7 animate-spin text-primary" />
+          </div>
+          <div className="space-y-2 text-center">
+            <div className="skeleton h-4 w-32 mx-auto" />
+            <div className="skeleton h-3 w-48 mx-auto" />
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="space-y-6 pb-12 animate-stagger">
       {/* 1. PROPERTIES VIEW */}
       {currentView === 'properties' && (
         <>
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div>
-              <h2 className="text-2xl font-extrabold tracking-tight">My Properties</h2>
-              <p className="text-sm text-slate-500 dark:text-slate-400">Manage real estate listings, rooms, and rent amounts.</p>
-            </div>
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
-              <div className="relative flex-1 sm:w-64">
-                <Search className="absolute left-3.5 top-2.5 w-4 h-4 text-slate-450" />
-                <input
-                  type="text"
-                  placeholder="Search properties..."
-                  value={propertySearchQuery}
-                  onChange={(e) => setPropertySearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary focus:border-transparent outline-none"
-                />
+          <div className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-primary via-indigo-600 to-blue-700 text-white shadow-xl">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.15),transparent_50%)]" />
+            <div className="absolute -bottom-8 -right-8 w-32 h-32 rounded-full bg-white/5 blur-2xl" />
+            <div className="relative p-6 md:p-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/70">Real Estate Portfolio</span>
+                <h2 className="text-2xl font-black tracking-tight mt-1">My Properties</h2>
+                <p className="text-sm text-white/80 mt-1">Manage real estate listings, rooms, and rent amounts.</p>
               </div>
-              <button
-                onClick={() => setIsAddModalOpen(true)}
-                className="flex items-center justify-center gap-2 px-5 py-2 rounded-xl bg-primary hover:bg-primary-hover text-white text-sm font-bold shadow-md shadow-primary/20 transition-all hover:scale-105 shrink-0"
-              >
-                <Plus className="w-4 h-4" />
-                Add Property
-              </button>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
+                <div className="relative flex-1 sm:w-64">
+                  <Search className="absolute left-3.5 top-2.5 w-4 h-4 text-white/60" />
+                  <input
+                    type="text"
+                    placeholder="Search properties..."
+                    value={propertySearchQuery}
+                    onChange={(e) => setPropertySearchQuery(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2 text-sm rounded-xl border border-white/20 bg-white/10 backdrop-blur-sm text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white/30 outline-none"
+                  />
+                </div>
+                <button
+                  onClick={() => setIsAddModalOpen(true)}
+                  className="flex items-center justify-center gap-2 px-5 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-white text-sm font-bold shadow-lg backdrop-blur-sm border border-white/20 transition-all hover:scale-105 shrink-0"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Property
+                </button>
+              </div>
             </div>
           </div>
 
+          {/* Summary Stats */}
+          {properties.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm card-hover flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Properties</p>
+                  <h3 className="text-2xl font-black text-slate-900 dark:text-white mt-1">{properties.length}</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Registered listings</p>
+                </div>
+                <div className="p-3 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 text-primary shadow-sm">
+                  <Building className="w-5 h-5" />
+                </div>
+              </div>
+              <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm card-hover flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Rooms</p>
+                  <h3 className="text-2xl font-black text-slate-900 dark:text-white mt-1">{properties.reduce((sum, p) => sum + (p.totalRooms || 0), 0)}</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Across all properties</p>
+                </div>
+                <div className="p-3 rounded-xl bg-gradient-to-br from-amber-500/20 to-amber-500/5 text-amber-600 shadow-sm">
+                  <BedDouble className="w-5 h-5" />
+                </div>
+              </div>
+              <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm card-hover flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Bed Licensing</p>
+                  <h3 className={`text-2xl font-black mt-1 ${billingStatus && billingStatus.unpaidPersons > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                    {billingStatus ? `${billingStatus.paidPersons}/${billingStatus.totalTenants}` : '...'}
+                  </h3>
+                  <p className={`text-xs mt-0.5 ${billingStatus && billingStatus.unpaidPersons > 0 ? 'text-amber-500' : 'text-emerald-500'}`}>
+                    {billingStatus && billingStatus.unpaidPersons > 0 ? `${billingStatus.unpaidPersons} unpaid` : 'All active'}
+                  </p>
+                </div>
+                <div className={`p-3 rounded-xl bg-gradient-to-br shadow-sm ${
+                  billingStatus && billingStatus.unpaidPersons > 0 
+                    ? 'from-amber-500/20 to-amber-500/5 text-amber-600' 
+                    : 'from-emerald-500/20 to-emerald-500/5 text-emerald-600'
+                }`}>
+                  <Users className="w-5 h-5" />
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Tenant Licensing Banner */}
           {billingStatus && (
-            <div className="p-6 rounded-2xl bg-slate-900 text-white border border-slate-800 shadow-xl relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="p-6 rounded-2xl bg-slate-900 text-white border border-slate-800 shadow-xl relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-6 card-hover">
               <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full blur-3xl -z-10" />
               <div className="space-y-1">
                 <h3 className="text-lg font-bold tracking-tight flex items-center gap-2">
@@ -895,8 +1172,10 @@ export default function PropertiesPage() {
 
           {/* Properties Table */}
           {properties.length === 0 ? (
-            <div className="text-center py-20 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm">
-              <Building className="w-12 h-12 mx-auto text-slate-400 mb-4" />
+            <div className="text-center py-20 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm card-hover">
+              <div className="w-16 h-16 mx-auto rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
+                <Building className="w-8 h-8 text-primary" />
+              </div>
               <h3 className="text-lg font-bold text-slate-700 dark:text-slate-300">No Properties Registered</h3>
               <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">Get started by creating your first property listing.</p>
               <button onClick={() => setIsAddModalOpen(true)} className="mt-6 px-4 py-2.5 rounded-xl bg-primary text-white text-sm font-bold shadow-md shadow-primary/25">
@@ -910,7 +1189,7 @@ export default function PropertiesPage() {
 
             if (filteredProperties.length === 0) {
               return (
-                <div className="text-center py-20 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                <div className="text-center py-20 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm card-hover">
                   <Search className="w-10 h-10 mx-auto text-slate-400 mb-3 animate-pulse" />
                   <h3 className="text-base font-bold text-slate-700 dark:text-slate-300">No matching properties</h3>
                   <p className="text-xs text-slate-500 mt-1">No property names match "{propertySearchQuery}". Try adjusting your keywords.</p>
@@ -921,7 +1200,7 @@ export default function PropertiesPage() {
             return (
               <>
                 {/* Desktop View */}
-                <div className="hidden md:block bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
+                <div className="hidden md:block bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden card-hover">
                   <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 font-sans">
                     <table className="w-max min-w-full text-left border-collapse">
                       <thead className="bg-[#F1F5F9] dark:bg-slate-950 font-semibold text-xs text-slate-550 uppercase tracking-wider border-b border-slate-200 dark:border-slate-800">
@@ -949,7 +1228,7 @@ export default function PropertiesPage() {
                                   </div>
                                   <div>
                                     <span className="font-bold text-slate-900 dark:text-white block">{prop.propertyName}</span>
-                                    <span className="text-xs text-slate-400 block">{prop.address}</span>
+                                    <span className="text-xs text-slate-400 block">{prop.fullAddress || ''}</span>
                                   </div>
                                 </div>
                               </td>
@@ -1001,7 +1280,7 @@ export default function PropertiesPage() {
                       <div
                         key={prop._id}
                         onClick={() => handleViewRooms(prop)}
-                        className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3 cursor-pointer hover:border-primary/50 transition-colors"
+                        className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3 cursor-pointer hover:border-primary/50 transition-colors card-hover"
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex items-center gap-3">
@@ -1010,7 +1289,7 @@ export default function PropertiesPage() {
                             </div>
                             <div>
                               <span className="font-bold text-slate-900 dark:text-white block">{prop.propertyName}</span>
-                              <span className="text-xs text-slate-400 block">{prop.address}</span>
+                              <span className="text-xs text-slate-400 block">{prop.fullAddress || ''}</span>
                             </div>
                           </div>
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] uppercase font-bold tracking-wider ${status === 'Active'
@@ -1091,79 +1370,52 @@ export default function PropertiesPage() {
                 <span className="text-slate-850 dark:text-slate-200">Rooms</span>
               </nav>
 
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => {
-                      setCurrentView('properties');
-                      setSelectedProperty(null);
-                    }}
-                    className="
-                      group relative
-                      w-10 h-10 rounded-full
-                      border border-slate-200 dark:border-slate-800
-                      flex items-center justify-center
-                      overflow-hidden
-                      cursor-pointer
-                      transition-all duration-300 ease-out
-                      hover:scale-105
-                      hover:shadow-lg
-                    "
-                  >
-                    {/* Animated Background Fill */}
-                    <span
-                      className="
-                        absolute inset-0
-                        bg-primary
-                        scale-0
-                        rounded-full
-                        transition-transform duration-300 ease-out
-                        group-hover:scale-100
-                      "
-                    ></span>
-
-                    {/* Arrow Icon */}
-                    <ArrowLeft
-                      className="
-                        relative z-10
-                        w-5 h-5
-                        text-slate-500
-                        transition-colors duration-300
-                        group-hover:text-white
-                      "
-                    />
-                  </button>
-                  <div>
-                    <h2 className="text-2xl font-extrabold text-slate-900 dark:text-white">{selectedProperty.propertyName} - Rooms</h2>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Manage all room allocations and statuses for this property.</p>
+              <div className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-indigo-600 via-primary to-blue-600 text-white shadow-xl">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.15),transparent_50%)]" />
+                <div className="absolute -bottom-8 -right-8 w-32 h-32 rounded-full bg-white/5 blur-2xl" />
+                <div className="relative p-6 md:p-7 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <button
+                      onClick={() => {
+                        setCurrentView('properties');
+                        setSelectedProperty(null);
+                      }}
+                      className="group relative w-10 h-10 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 backdrop-blur-sm border border-white/20"
+                    >
+                      <ArrowLeft className="relative z-10 w-5 h-5 text-white transition-colors duration-300" />
+                    </button>
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/70">Room Management</span>
+                      <h2 className="text-2xl font-black tracking-tight mt-0.5">{selectedProperty.propertyName} - Rooms</h2>
+                      <p className="text-sm text-white/80 mt-0.5">Manage all room allocations and statuses for this property.</p>
+                    </div>
                   </div>
-                </div>
-
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
-                  <div className="relative flex-1 sm:w-64">
-                    <Search className="absolute left-3.5 top-2.5 w-4 h-4 text-slate-455" />
-                    <input
-                      type="text"
-                      placeholder="Search room number or tenant..."
-                      value={roomSearchQuery}
-                      onChange={(e) => setRoomSearchQuery(e.target.value)}
-                      className="w-full pl-9 pr-4 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary focus:border-transparent outline-none"
-                    />
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
+                    <div className="relative flex-1 sm:w-64">
+                      <Search className="absolute left-3.5 top-2.5 w-4 h-4 text-white/60" />
+                      <input
+                        type="text"
+                        placeholder="Search room number or tenant..."
+                        value={roomSearchQuery}
+                        onChange={(e) => setRoomSearchQuery(e.target.value)}
+                        className="w-full pl-9 pr-4 py-2 text-sm rounded-xl border border-white/20 bg-white/10 backdrop-blur-sm text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white/30 outline-none"
+                      />
+                    </div>
+                    <button
+                      onClick={() => { setSelectedPropertyId(selectedProperty._id); setIsAddRoomModalOpen(true); }}
+                      className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2 bg-white/15 hover:bg-white/25 text-white rounded-xl text-xs font-bold transition-all shadow-md backdrop-blur-sm border border-white/20 shrink-0"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add Room
+                    </button>
                   </div>
-                  <button
-                    onClick={() => { setSelectedPropertyId(selectedProperty._id); setIsAddRoomModalOpen(true); }}
-                    className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-primary/20 shrink-0"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Add Room
-                  </button>
                 </div>
               </div>
             </div>
 
             {/* Bento Analytics Grid */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm flex items-start justify-between">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm flex items-start justify-between card-hover">
                 <div>
                   <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Total Rooms</p>
                   <h3 className="text-3xl text-slate-900 dark:text-white font-extrabold font-mono">{totalRoomsCount}</h3>
@@ -1174,7 +1426,7 @@ export default function PropertiesPage() {
                 </div>
               </div>
 
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm flex items-start justify-between">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm flex items-start justify-between card-hover">
                 <div>
                   <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Overall Occupancy</p>
                   <h3 className="text-3xl text-slate-900 dark:text-white font-extrabold font-mono">{overallOccupancyPercent}%</h3>
@@ -1185,7 +1437,7 @@ export default function PropertiesPage() {
                 </div>
               </div>
 
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm flex items-start justify-between">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm flex items-start justify-between card-hover">
                 <div>
                   <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Available Beds</p>
                   <h3 className="text-3xl text-slate-900 dark:text-white font-extrabold font-mono">{availableBedsCount}</h3>
@@ -1198,7 +1450,7 @@ export default function PropertiesPage() {
             </div>
 
             {/* Rooms Table */}
-            <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
+            <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden card-hover">
               <div className="p-4 border-b border-slate-100 dark:border-slate-850 flex justify-between items-center bg-slate-50 dark:bg-slate-950">
                 <h3 className="font-bold text-sm text-slate-900 dark:text-white uppercase tracking-wider">Room Directory</h3>
                 <div className="text-xs text-slate-500">Showing {totalRoomsCount} rooms</div>
@@ -1251,58 +1503,7 @@ export default function PropertiesPage() {
                             const totalBeds = room.beds?.length || room.bedCapacity || 1;
                             const hasLinkedUsers = occupiedBeds.length > 0;
 
-                            if (isEditing) {
-                              return (
-                                <tr key={room._id} className="bg-primary/5 dark:bg-primary/10 border-y border-primary/20">
-                                  <td className="py-4 px-4 font-mono text-slate-400">{(idx + 1).toString().padStart(2, '0')}</td>
-                                  <td className="py-4 px-4 font-bold text-slate-900 dark:text-white" colSpan={2}>
-                                    Editing Room {room.roomNumber}
-                                  </td>
-                                  <td className="py-4 px-4" colSpan={2}>
-                                    <div className="flex items-center gap-3 justify-end">
-                                      <div className="w-32">
-                                        <label className="block text-[9px] uppercase font-bold text-slate-400 mb-1">Monthly Rent</label>
-                                        <div className="relative">
-                                          <IndianRupee className="absolute left-2 top-2.5 w-3 h-3 text-slate-455" />
-                                          <input
-                                            type="number"
-                                            value={editRent}
-                                            onChange={(e) => setEditRent(parseInt(e.target.value) || 0)}
-                                            className="w-full pl-6 pr-2 py-1 text-xs rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-1 focus:ring-primary"
-                                          />
-                                        </div>
-                                      </div>
-                                      <div className="w-24">
-                                        <label className="block text-[9px] uppercase font-bold text-slate-400 mb-1">
-                                          {isFlat ? 'Max Occupants' : 'Beds'}
-                                        </label>
-                                        <input
-                                          type="number"
-                                          value={editBedCapacity}
-                                          onChange={(e) => setEditBedCapacity(Math.max(1, parseInt(e.target.value) || 1))}
-                                          className="w-full px-2 py-1 text-xs rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-1 focus:ring-primary"
-                                        />
-                                      </div>
-                                      <div className="flex gap-1.5 mt-4">
-                                        <button
-                                          onClick={() => handleSaveRoom(room._id, selectedProperty._id)}
-                                          disabled={savingRoomId === room._id}
-                                          className="p-1.5 rounded bg-emerald-500 text-white hover:bg-emerald-600 transition-colors disabled:opacity-50"
-                                        >
-                                          {savingRoomId === room._id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                                        </button>
-                                        <button
-                                          onClick={() => setEditingRoomId(null)}
-                                          className="p-1.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-550 hover:bg-slate-200 transition-colors"
-                                        >
-                                          <X className="w-3.5 h-3.5" />
-                                        </button>
-                                      </div>
-                                    </div>
-                                  </td>
-                                </tr>
-                              );
-                            }
+
 
                             return (
                               <tr key={room._id} className="hover:bg-slate-50 dark:hover:bg-slate-955/40 transition-colors group">
@@ -1310,6 +1511,13 @@ export default function PropertiesPage() {
                                 <td className="py-4 px-4">
                                   <span className="font-bold text-slate-900 dark:text-white block">{room.roomNumber}</span>
                                   <span className="text-[10px] text-slate-450 capitalize">{room.roomType || 'PG'} Room</span>
+                                  {/* Filter badges */}
+                                  <div className="flex flex-wrap gap-1 mt-1.5">
+                                    {room.flatCategory && <span className="px-1.5 py-0.5 bg-primary/10 text-primary text-[9px] font-bold rounded">{room.flatCategory}</span>}
+                                    {room.furnishedType && <span className="px-1.5 py-0.5 bg-amber-500/10 text-amber-600 text-[9px] font-bold rounded">{room.furnishedType}</span>}
+                                    {room.propertyType?.map((pt: string) => <span key={pt} className="px-1.5 py-0.5 bg-violet-500/10 text-violet-600 text-[9px] font-bold rounded">{pt}</span>)}
+                                    {room.preferredTenant?.map((tt: string) => <span key={tt} className="px-1.5 py-0.5 bg-sky-500/10 text-sky-600 text-[9px] font-bold rounded">{tt}</span>)}
+                                  </div>
                                 </td>
                                 <td className="py-4 px-4">
                                   <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] uppercase font-bold ${room.occupancyStatus === 'fully_occupied'
@@ -1354,7 +1562,8 @@ export default function PropertiesPage() {
                                           roomId: room._id,
                                           roomNumber: room.roomNumber,
                                           bedId: firstVacantBed._id,
-                                          bedNumber: firstVacantBed.bedNumber
+                                          bedNumber: firstVacantBed.bedNumber,
+                                          monthlyRent: room.monthlyRent
                                         });
                                       }}
                                       disabled={room.occupancyStatus === 'fully_occupied'}
@@ -1397,57 +1606,7 @@ export default function PropertiesPage() {
                         const totalBeds = room.beds?.length || room.bedCapacity || 1;
                         const hasLinkedUsers = occupiedBeds.length > 0;
 
-                        if (isEditing) {
-                          return (
-                            <div key={room._id} className="bg-primary/5 dark:bg-primary/10 p-4 space-y-3">
-                              <div className="text-sm font-bold text-slate-900 dark:text-white">
-                                Editing Room {room.roomNumber}
-                              </div>
-                              <div className="space-y-3">
-                                <div>
-                                  <label className="block text-[9px] uppercase font-bold text-slate-400 mb-1">Monthly Rent</label>
-                                  <div className="relative">
-                                    <IndianRupee className="absolute left-2 top-2.5 w-3.5 h-3.5 text-slate-455" />
-                                    <input
-                                      type="number"
-                                      value={editRent}
-                                      onChange={(e) => setEditRent(parseInt(e.target.value) || 0)}
-                                      className="w-full pl-7 pr-2 py-1.5 text-xs rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-1 focus:ring-primary outline-none"
-                                    />
-                                  </div>
-                                </div>
-                                <div>
-                                  <label className="block text-[9px] uppercase font-bold text-slate-400 mb-1">
-                                    {isFlat ? 'Max Occupants' : 'Beds'}
-                                  </label>
-                                  <input
-                                    type="number"
-                                    value={editBedCapacity}
-                                    onChange={(e) => setEditBedCapacity(Math.max(1, parseInt(e.target.value) || 1))}
-                                    className="w-full px-2 py-1.5 text-xs rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-1 focus:ring-primary outline-none"
-                                  />
-                                </div>
-                                <div className="flex gap-2 justify-end pt-1">
-                                  <button
-                                    onClick={() => handleSaveRoom(room._id, selectedProperty._id)}
-                                    disabled={savingRoomId === room._id}
-                                    className="flex items-center justify-center px-3 py-1.5 rounded bg-emerald-500 text-white hover:bg-emerald-600 transition-colors disabled:opacity-50 text-xs font-bold gap-1"
-                                  >
-                                    {savingRoomId === room._id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                                    Save
-                                  </button>
-                                  <button
-                                    onClick={() => setEditingRoomId(null)}
-                                    className="flex items-center justify-center px-3 py-1.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-350 hover:bg-slate-200 transition-colors text-xs font-bold gap-1"
-                                  >
-                                    <X className="w-3.5 h-3.5" />
-                                    Cancel
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        }
+
 
                         return (
                           <div key={room._id} className="p-4 space-y-3">
@@ -1455,6 +1614,13 @@ export default function PropertiesPage() {
                               <div>
                                 <span className="font-bold text-slate-900 dark:text-white text-base block">{room.roomNumber}</span>
                                 <span className="text-[10px] text-slate-450 capitalize">{room.roomType || 'PG'} Room</span>
+                                {/* Filter badges */}
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {room.flatCategory && <span className="px-1.5 py-0.5 bg-primary/10 text-primary text-[9px] font-bold rounded">{room.flatCategory}</span>}
+                                  {room.furnishedType && <span className="px-1.5 py-0.5 bg-amber-500/10 text-amber-600 text-[9px] font-bold rounded">{room.furnishedType}</span>}
+                                  {room.propertyType?.map((pt: string) => <span key={pt} className="px-1.5 py-0.5 bg-violet-500/10 text-violet-600 text-[9px] font-bold rounded">{pt}</span>)}
+                                  {room.preferredTenant?.map((tt: string) => <span key={tt} className="px-1.5 py-0.5 bg-sky-500/10 text-sky-600 text-[9px] font-bold rounded">{tt}</span>)}
+                                </div>
                               </div>
                               <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] uppercase font-bold ${room.occupancyStatus === 'fully_occupied'
                                 ? 'bg-rose-50 dark:bg-rose-950/20 text-rose-600 border border-rose-250/50'
@@ -1500,7 +1666,8 @@ export default function PropertiesPage() {
                                     roomId: room._id,
                                     roomNumber: room.roomNumber,
                                     bedId: firstVacantBed._id,
-                                    bedNumber: firstVacantBed.bedNumber
+                                    bedNumber: firstVacantBed.bedNumber,
+                                    monthlyRent: room.monthlyRent
                                   });
                                 }}
                                 disabled={room.occupancyStatus === 'fully_occupied'}
@@ -1582,99 +1749,72 @@ export default function PropertiesPage() {
                 <span className="text-slate-850 dark:text-slate-200">Linked Users</span>
               </nav>
 
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => {
-                      setCurrentView('properties');
-                      setSelectedProperty(null);
-                    }}
-                    className="
-                      group relative
-                      w-10 h-10 rounded-full
-                      border border-slate-200 dark:border-slate-800
-                      flex items-center justify-center
-                      overflow-hidden
-                      cursor-pointer
-                      transition-all duration-300 ease-out
-                      hover:scale-105
-                      hover:shadow-lg
-                    "
-                  >
-                    {/* Animated Background Fill */}
-                    <span
-                      className="
-                        absolute inset-0
-                        bg-primary
-                        scale-0
-                        rounded-full
-                        transition-transform duration-300 ease-out
-                        group-hover:scale-100
-                      "
-                    ></span>
-
-                    {/* Arrow Icon */}
-                    <ArrowLeft
-                      className="
-                        relative z-10
-                        w-5 h-5
-                        text-slate-500
-                        transition-colors duration-300
-                        group-hover:text-white
-                      "
-                    />
-                  </button>
-                  <div>
-                    <h2 className="text-2xl font-extrabold text-slate-900 dark:text-white">Room {selectedRoom.roomNumber} - Occupants</h2>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">View and manage occupants assigned to this unit.</p>
+              <div className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-600 text-white shadow-xl">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.15),transparent_50%)]" />
+                <div className="absolute -bottom-8 -right-8 w-32 h-32 rounded-full bg-white/5 blur-2xl" />
+                <div className="relative p-6 md:p-7 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <button
+                      onClick={() => {
+                        setCurrentView('properties');
+                        setSelectedProperty(null);
+                      }}
+                      className="group relative w-10 h-10 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 backdrop-blur-sm border border-white/20"
+                    >
+                      <ArrowLeft className="relative z-10 w-5 h-5 text-white transition-colors duration-300" />
+                    </button>
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/70">Occupant Management</span>
+                      <h2 className="text-2xl font-black tracking-tight mt-0.5">Room {selectedRoom.roomNumber} - Occupants</h2>
+                      <p className="text-sm text-white/80 mt-0.5">View and manage occupants assigned to this unit.</p>
+                    </div>
                   </div>
-                </div>
-
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
-                  <div className="relative flex-1 sm:w-64">
-                    <Search className="absolute left-3.5 top-2.5 w-4 h-4 text-slate-455" />
-                    <input
-                      type="text"
-                      placeholder="Search occupant name..."
-                      value={linkedUserSearchQuery}
-                      onChange={(e) => setLinkedUserSearchQuery(e.target.value)}
-                      className="w-full pl-9 pr-4 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary focus:border-transparent outline-none"
-                    />
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
+                    <div className="relative flex-1 sm:w-64">
+                      <Search className="absolute left-3.5 top-2.5 w-4 h-4 text-white/60" />
+                      <input
+                        type="text"
+                        placeholder="Search occupant name..."
+                        value={linkedUserSearchQuery}
+                        onChange={(e) => setLinkedUserSearchQuery(e.target.value)}
+                        className="w-full pl-9 pr-4 py-2 text-sm rounded-xl border border-white/20 bg-white/10 backdrop-blur-sm text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white/30 outline-none"
+                      />
+                    </div>
+                    <button
+                      onClick={() => {
+                        const vacantBeds = roomBeds.filter((b: any) => !b.isOccupied);
+                        if (vacantBeds.length === 0) {
+                          showToast('No vacant beds available in this room.', 'error');
+                          return;
+                        }
+                        const firstVacantBed = vacantBeds[0];
+                        setAssigningContext({
+                          propertyId: selectedProperty._id,
+                          propertyName: selectedProperty.propertyName,
+                          roomId: selectedRoom._id,
+                          roomNumber: selectedRoom.roomNumber,
+                          bedId: firstVacantBed._id,
+                          bedNumber: firstVacantBed.bedNumber
+                        });
+                        setSelectedTenantToAssign('');
+                        setAssignMode('existing');
+                        fetchUnassignedTenants();
+                        setIsAssignModalOpen(true);
+                      }}
+                      disabled={roomBeds.every((b: any) => b.isOccupied)}
+                      className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2 bg-white/15 hover:bg-white/25 text-white rounded-xl text-xs font-bold transition-all shadow-md backdrop-blur-sm border border-white/20 shrink-0 disabled:opacity-50 disabled:scale-100"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Assign Tenant
+                    </button>
                   </div>
-                  <button
-                    onClick={() => {
-                      const vacantBeds = roomBeds.filter((b: any) => !b.isOccupied);
-                      if (vacantBeds.length === 0) {
-                        showToast('No vacant beds available in this room.', 'error');
-                        return;
-                      }
-                      const firstVacantBed = vacantBeds[0];
-                      setAssigningContext({
-                        propertyId: selectedProperty._id,
-                        propertyName: selectedProperty.propertyName,
-                        roomId: selectedRoom._id,
-                        roomNumber: selectedRoom.roomNumber,
-                        bedId: firstVacantBed._id,
-                        bedNumber: firstVacantBed.bedNumber
-                      });
-                      setSelectedTenantToAssign('');
-                      setAssignMode('existing');
-                      fetchUnassignedTenants();
-                      setIsAssignModalOpen(true);
-                    }}
-                    disabled={roomBeds.every((b: any) => b.isOccupied)}
-                    className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-primary/20 shrink-0 disabled:opacity-50 disabled:scale-100"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Assign Tenant
-                  </button>
                 </div>
               </div>
             </div>
 
             {/* Flat Lease Agreement Card */}
             {selectedRoom.roomType === 'flat' && (
-              <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4 card-hover">
                 <div className="flex items-center gap-3 min-w-0 w-full md:w-auto">
                   <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
                     <FileText className="w-5 h-5" />
@@ -1787,7 +1927,7 @@ export default function PropertiesPage() {
             )}
 
             {/* Linked Users Table */}
-            <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
+            <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden card-hover" style={{ width: 1250 }}>
               <div className="p-4 border-b border-slate-100 dark:border-slate-850 bg-slate-50 dark:bg-slate-950 flex justify-between items-center">
                 <h3 className="font-bold text-xs uppercase tracking-wider text-slate-400">Linked Users Directory</h3>
                 {linkedUserSearchQuery && (
@@ -1865,64 +2005,13 @@ export default function PropertiesPage() {
                                 </span>
                               </td>
                               {selectedRoom.roomType !== 'flat' && (
-                                editingRentTenantId === tenant._id ? (
-                                  <td className="py-4 px-4 text-right" onClick={(e) => e.stopPropagation()}>
-                                    <div className="flex items-center gap-1.5 justify-end">
-                                      <div className="relative w-24">
-                                        <IndianRupee className="absolute left-1.5 top-2.5 w-3 h-3 text-slate-400" />
-                                        <input
-                                          type="number"
-                                          value={editRentAmount}
-                                          onChange={(e) => setEditRentAmount(parseInt(e.target.value) || 0)}
-                                          className="w-full pl-5 pr-1.5 py-1 text-xs rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-1 focus:ring-primary outline-none"
-                                          autoFocus
-                                        />
-                                      </div>
-                                      <button
-                                        onClick={() => handleSaveTenantRent(tenant._id)}
-                                        disabled={savingRentTenantId === tenant._id}
-                                        className="p-1 rounded bg-emerald-500 text-white hover:bg-emerald-600 transition-colors disabled:opacity-50"
-                                        title="Save Rent"
-                                      >
-                                        {savingRentTenantId === tenant._id ? (
-                                          <Loader2 className="w-3 h-3 animate-spin" />
-                                        ) : (
-                                          <Check className="w-3 h-3" />
-                                        )}
-                                      </button>
-                                      <button
-                                        onClick={() => setEditingRentTenantId(null)}
-                                        className="p-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-200 transition-colors"
-                                        title="Cancel"
-                                      >
-                                        <X className="w-3 h-3" />
-                                      </button>
-                                    </div>
-                                  </td>
-                                ) : (
-                                  <td className="py-4 px-4 text-right font-mono font-bold text-slate-700 dark:text-slate-300" onClick={(e) => e.stopPropagation()}>
-                                    <div className="flex items-center justify-end gap-1.5 group/rent">
-                                      <span>
-                                        ₹{(
-                                          (tenant.rentAmount !== undefined && tenant.rentAmount !== null)
-                                            ? tenant.rentAmount
-                                            : selectedRoom.monthlyRent
-                                        ).toLocaleString('en-IN')}
-                                      </span>
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setEditingRentTenantId(tenant._id);
-                                          setEditRentAmount(tenant.rentAmount !== null && tenant.rentAmount !== undefined ? tenant.rentAmount : selectedRoom.monthlyRent);
-                                        }}
-                                        className="p-1 border border-slate-200 dark:border-slate-800 text-slate-400 hover:text-primary hover:bg-slate-50 dark:hover:bg-slate-850 rounded transition-all opacity-0 group-hover/rent:opacity-100 focus:opacity-100"
-                                        title="Adjust Rent"
-                                      >
-                                        <Pencil className="w-3 h-3" />
-                                      </button>
-                                    </div>
-                                  </td>
-                                )
+                                <td className="py-4 px-4 text-right font-mono font-bold text-slate-700 dark:text-slate-300">
+                                  ₹{(
+                                    (tenant.rentAmount !== undefined && tenant.rentAmount !== null)
+                                      ? tenant.rentAmount
+                                      : selectedRoom.monthlyRent
+                                  ).toLocaleString('en-IN')}
+                                </td>
                               )}
                               <td className="py-4 px-4 text-right">
                                 <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] uppercase font-bold ${paymentStatus === 'Cleared'
@@ -1932,18 +2021,33 @@ export default function PropertiesPage() {
                                   {paymentStatus}
                                 </span>
                               </td>
-                              <td className="py-4 px-4 text-center">
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setTenantToUnassign(tenant);
-                                    setIsUnassignModalOpen(true);
-                                  }}
-                                  className="inline-flex items-center justify-center px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-bold rounded-lg transition-all border border-rose-200"
-                                >
-                                  Unassign
-                                </button>
+                              <td className="py-4 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center justify-center gap-2">
+                                  {selectedRoom.roomType !== 'flat' && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleStartEditTenantRent(tenant);
+                                      }}
+                                      className="p-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-300 transition-all border border-slate-200 dark:border-slate-700"
+                                      title="Edit Rent"
+                                    >
+                                      <Pencil className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setTenantToUnassign(tenant);
+                                      setIsUnassignModalOpen(true);
+                                    }}
+                                    className="inline-flex items-center justify-center px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-bold rounded-lg transition-all border border-rose-200"
+                                  >
+                                    Unassign
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           );
@@ -1984,7 +2088,8 @@ export default function PropertiesPage() {
                                       roomId: selectedRoom._id,
                                       roomNumber: selectedRoom.roomNumber,
                                       bedId: bed._id,
-                                      bedNumber: bed.bedNumber
+                                      bedNumber: bed.bedNumber,
+                                      monthlyRent: selectedRoom.monthlyRent
                                     });
                                   }}
                                   className="inline-flex items-center justify-center px-2.5 py-1 bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold rounded-lg transition-all"
@@ -2069,70 +2174,39 @@ export default function PropertiesPage() {
                             {selectedRoom.roomType !== 'flat' && (
                               <div className="flex justify-between items-center min-h-[2rem]">
                                 <span className="text-slate-500">Rent:</span>
-                                {isEditingRent ? (
-                                  <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                                    <div className="relative w-20">
-                                      <IndianRupee className="absolute left-1.5 top-2 w-3 h-3 text-slate-400" />
-                                      <input
-                                        type="number"
-                                        value={editRentAmount}
-                                        onChange={(e) => setEditRentAmount(parseInt(e.target.value) || 0)}
-                                        className="w-full pl-5 pr-1.5 py-0.5 text-xs rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-1 focus:ring-primary outline-none"
-                                        autoFocus
-                                      />
-                                    </div>
-                                    <button
-                                      onClick={() => handleSaveTenantRent(tenant._id)}
-                                      disabled={savingRentTenantId === tenant._id}
-                                      className="p-1 rounded bg-emerald-500 text-white hover:bg-emerald-600 transition-colors disabled:opacity-50"
-                                    >
-                                      {savingRentTenantId === tenant._id ? (
-                                        <Loader2 className="w-3 h-3 animate-spin" />
-                                      ) : (
-                                        <Check className="w-3 h-3" />
-                                      )}
-                                    </button>
-                                    <button
-                                      onClick={() => setEditingRentTenantId(null)}
-                                      className="p-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-550 hover:bg-slate-200 transition-colors"
-                                    >
-                                      <X className="w-3 h-3" />
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <div className="flex items-center gap-1.5 group/rent-m">
-                                    <span className="font-mono font-bold text-slate-700 dark:text-slate-300">
-                                      ₹{((tenant.rentAmount !== undefined && tenant.rentAmount !== null) ? tenant.rentAmount : selectedRoom.monthlyRent).toLocaleString('en-IN')}
-                                    </span>
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setEditingRentTenantId(tenant._id);
-                                        setEditRentAmount(tenant.rentAmount !== null && tenant.rentAmount !== undefined ? tenant.rentAmount : selectedRoom.monthlyRent);
-                                      }}
-                                      className="p-1 border border-slate-200 dark:border-slate-800 text-slate-400 hover:text-primary hover:bg-slate-50 rounded"
-                                      title="Adjust Rent"
-                                    >
-                                      <Pencil className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                )}
+                                <span className="font-mono font-bold text-slate-700 dark:text-slate-300">
+                                  ₹{((tenant.rentAmount !== undefined && tenant.rentAmount !== null) ? tenant.rentAmount : selectedRoom.monthlyRent).toLocaleString('en-IN')}
+                                </span>
                               </div>
                             )}
                           </div>
 
                           <div className="flex justify-between items-center pt-1" onClick={(e) => e.stopPropagation()}>
                             <span className="text-[10px] font-mono text-slate-450">Tap card for Dossier</span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setTenantToUnassign(tenant);
-                                setIsUnassignModalOpen(true);
-                              }}
-                              className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-bold rounded-lg transition-all border border-rose-200"
-                            >
-                              Unassign
-                            </button>
+                            <div className="flex gap-2">
+                              {selectedRoom.roomType !== 'flat' && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleStartEditTenantRent(tenant);
+                                  }}
+                                  className="p-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-300 transition-all border border-slate-200 dark:border-slate-700"
+                                  title="Edit Rent"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setTenantToUnassign(tenant);
+                                  setIsUnassignModalOpen(true);
+                                }}
+                                className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-bold rounded-lg transition-all border border-rose-200"
+                              >
+                                Unassign
+                              </button>
+                            </div>
                           </div>
                         </div>
                       );
@@ -2166,7 +2240,8 @@ export default function PropertiesPage() {
                                   roomId: selectedRoom._id,
                                   roomNumber: selectedRoom.roomNumber,
                                   bedId: bed._id,
-                                  bedNumber: bed.bedNumber
+                                  bedNumber: bed.bedNumber,
+                                  monthlyRent: selectedRoom.monthlyRent
                                 });
                               }}
                               className="inline-flex items-center justify-center px-2.5 py-1 bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold rounded-lg transition-all"
@@ -2188,7 +2263,7 @@ export default function PropertiesPage() {
       {/* Add Property Modal */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative">
+          <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative max-h-[90vh] overflow-y-auto">
             <button onClick={() => setIsAddModalOpen(false)} className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
               <X className="w-5 h-5" />
             </button>
@@ -2200,12 +2275,63 @@ export default function PropertiesPage() {
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-primary text-slate-900 dark:text-white"
                   placeholder="e.g. Premium Executive PG" required />
               </div>
-              <div>
-                <label className="block text-xs font-bold mb-1 uppercase tracking-wider text-slate-500">Full Address</label>
-                <input type="text" value={address} onChange={(e) => setAddress(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-primary text-slate-900 dark:text-white"
-                  placeholder="e.g. Sector 45, Gurugram" required />
+
+              {/* Structured Address Fields */}
+              <div className="space-y-3 p-4 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+                <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Property Address</span>
+                <div>
+                  <label className="block text-[11px] font-semibold mb-1 text-slate-500">Pincode *</label>
+                  <div className="relative">
+                    <input type="text" value={addrPincode} onChange={(e) => handlePincodeLookup(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      className="w-full px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-1 focus:ring-primary text-slate-900 dark:text-white"
+                      placeholder="e.g. 110001" maxLength={6} required />
+                    {pincodeLoading && <Loader2 className="absolute right-3 top-2.5 w-4 h-4 animate-spin text-primary" />}
+                  </div>
+                  {pincodeError && <p className="text-[10px] text-rose-500 mt-1">{pincodeError}</p>}
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold mb-1 text-slate-500">Flat, House No., Building, Company, Apartment</label>
+                  <input type="text" value={addrFlatNo} onChange={(e) => setAddrFlatNo(e.target.value)}
+                    className="w-full px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-1 focus:ring-primary text-slate-900 dark:text-white"
+                    placeholder="e.g. Flat 302, Tower B" />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold mb-1 text-slate-500">Area, Street, Sector, Village</label>
+                  <input type="text" value={addrArea} onChange={(e) => setAddrArea(e.target.value)}
+                    className="w-full px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-1 focus:ring-primary text-slate-900 dark:text-white"
+                    placeholder="e.g. Sector 45" />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold mb-1 text-slate-500">Landmark</label>
+                  <input type="text" value={addrLandmark} onChange={(e) => setAddrLandmark(e.target.value)}
+                    className="w-full px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-1 focus:ring-primary text-slate-900 dark:text-white"
+                    placeholder="e.g. Near Metro Station" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold mb-1 text-slate-500">Town / City *</label>
+                    {pincodeCities.length > 0 ? (
+                      <select value={addrCity} onChange={(e) => setAddrCity(e.target.value)}
+                        className="w-full px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-1 focus:ring-primary text-slate-900 dark:text-white"
+                        required>
+                        <option value="">Select Town/City</option>
+                        {pincodeCities.map((c) => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    ) : (
+                      <input type="text" value={addrCity} onChange={(e) => setAddrCity(e.target.value)}
+                        className="w-full px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-1 focus:ring-primary text-slate-900 dark:text-white"
+                        placeholder="Enter city" required />
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold mb-1 text-slate-500">State *</label>
+                    <input type="text" value={addrState} readOnly
+                      className="w-full px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 text-sm text-slate-600 dark:text-slate-300 cursor-not-allowed"
+                      placeholder="Auto-filled from pincode" required />
+                  </div>
+                </div>
               </div>
+
               <div>
                 <label className="block text-xs font-bold mb-1 uppercase tracking-wider text-slate-500">Description</label>
                 <textarea value={description} onChange={(e) => setDescription(e.target.value)}
@@ -2225,7 +2351,7 @@ export default function PropertiesPage() {
       {/* Add Room Modal */}
       {isAddRoomModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative">
+          <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative max-h-[90vh] overflow-y-auto">
             <button onClick={() => setIsAddRoomModalOpen(false)} className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
               <X className="w-5 h-5" />
             </button>
@@ -2241,13 +2367,83 @@ export default function PropertiesPage() {
                 <label className="block text-xs font-bold mb-2 uppercase tracking-wider text-slate-500">Unit Type</label>
                 <div className="flex gap-6">
                   <label className="flex items-center gap-2 text-sm cursor-pointer">
-                    <input type="radio" name="roomType" checked={roomType === 'pg'} onChange={() => { setRoomType('pg'); setBedCapacity(2); }} className="text-primary focus:ring-primary" />
+                    <input type="radio" name="roomType" checked={roomType === 'pg'} onChange={() => { setRoomType('pg'); setBedCapacity(2); setRoomFlatCategory(''); }} className="text-primary focus:ring-primary" />
                     <span className="text-slate-800 dark:text-slate-200 font-semibold">Paying Guest (PG)</span>
                   </label>
                   <label className="flex items-center gap-2 text-sm cursor-pointer">
                     <input type="radio" name="roomType" checked={roomType === 'flat'} onChange={() => { setRoomType('flat'); setBedCapacity(4); }} className="text-primary focus:ring-primary" />
                     <span className="text-slate-800 dark:text-slate-200 font-semibold">Flat / Apartment</span>
                   </label>
+                </div>
+              </div>
+
+              {/* Flat Category — only for flat type */}
+              {roomType === 'flat' && (
+                <div>
+                  <label className="block text-xs font-bold mb-2 uppercase tracking-wider text-slate-500">Flat Category</label>
+                  <div className="flex flex-wrap gap-2">
+                    {['1RK', '1BHK', '2BHK', '3BHK', '4BHK'].map((cat) => (
+                      <button key={cat} type="button"
+                        onClick={() => setRoomFlatCategory(roomFlatCategory === cat ? '' : cat)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${roomFlatCategory === cat
+                            ? 'bg-primary text-white border-primary shadow-md shadow-primary/20'
+                            : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-primary/50'
+                          }`}>
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Property Type — multi-select */}
+              <div>
+                <label className="block text-xs font-bold mb-2 uppercase tracking-wider text-slate-500">Property Type</label>
+                <div className="flex flex-wrap gap-2">
+                  {['Fully Independent', 'Owner Free', 'Living Couple', 'Student Allowed'].map((pt) => (
+                    <button key={pt} type="button"
+                      onClick={() => setRoomPropertyType(prev => prev.includes(pt) ? prev.filter(x => x !== pt) : [...prev, pt])}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${roomPropertyType.includes(pt)
+                          ? 'bg-violet-500 text-white border-violet-500 shadow-md shadow-violet-500/20'
+                          : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-violet-400/50'
+                        }`}>
+                      {pt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Preferred Tenant — multi-select */}
+              <div>
+                <label className="block text-xs font-bold mb-2 uppercase tracking-wider text-slate-500">Preferred Tenant</label>
+                <div className="flex flex-wrap gap-2">
+                  {['All', 'Boys', 'Boys & Girls', 'Company', 'Family', 'Family & Boys', 'Family & Girls', 'Girls'].map((tt) => (
+                    <button key={tt} type="button"
+                      onClick={() => setRoomPreferredTenant(prev => prev.includes(tt) ? prev.filter(x => x !== tt) : [...prev, tt])}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${roomPreferredTenant.includes(tt)
+                          ? 'bg-sky-500 text-white border-sky-500 shadow-md shadow-sky-500/20'
+                          : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-sky-400/50'
+                        }`}>
+                      {tt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Furnished Type — single select */}
+              <div>
+                <label className="block text-xs font-bold mb-2 uppercase tracking-wider text-slate-500">Furnished Type</label>
+                <div className="flex flex-wrap gap-2">
+                  {['Fully Furnished', 'Semi Furnished', 'Unfurnished'].map((ft) => (
+                    <button key={ft} type="button"
+                      onClick={() => setRoomFurnishedType(roomFurnishedType === ft ? '' : ft)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${roomFurnishedType === ft
+                          ? 'bg-amber-500 text-white border-amber-500 shadow-md shadow-amber-500/20'
+                          : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-amber-400/50'
+                        }`}>
+                      {ft}
+                    </button>
+                  ))}
                 </div>
               </div>
 
@@ -2262,7 +2458,7 @@ export default function PropertiesPage() {
 
               <div>
                 <label className="block text-xs font-bold mb-1 uppercase tracking-wider text-slate-500 flex items-center gap-1">
-                  <IndianRupee className="w-3.5 h-3.5" /> Monthly Rent (INR)
+                  <IndianRupee className="w-3.5 h-3.5" />{roomType === 'flat' ? ' Monthly Rent (INR)' : 'Monthly Rent Per Bed'}
                 </label>
                 <div className="relative">
                   <IndianRupee className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
@@ -2311,8 +2507,15 @@ export default function PropertiesPage() {
 
                 <div className="grid grid-cols-3 gap-3">
                   <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-150 dark:border-slate-850 text-center">
-                    <span className="block text-[10px] uppercase font-bold text-slate-400">Credit Score</span>
-                    <span className="text-base font-extrabold text-slate-900 dark:text-white">{selectedTenant.creditScore || 700}</span>
+                    <span className="block text-[10px] uppercase font-bold text-slate-400">Verification</span>
+                    <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-md border inline-block mt-1 ${selectedTenant.verificationStatus === 'verified'
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-600 dark:bg-emerald-950/20 dark:border-emerald-900'
+                      : selectedTenant.verificationStatus === 'pending'
+                        ? 'bg-amber-50 border-amber-200 text-amber-600 dark:bg-amber-950/20 dark:border-amber-900'
+                        : 'bg-rose-50 border-rose-200 text-rose-600 dark:bg-rose-950/20 dark:border-rose-900'
+                      }`}>
+                      {selectedTenant.verificationStatus || 'verified'}
+                    </span>
                   </div>
                   <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-150 dark:border-slate-850 text-center">
                     <span className="block text-[10px] uppercase font-bold text-slate-400">Rating</span>
@@ -2333,6 +2536,30 @@ export default function PropertiesPage() {
                     </span>
                   </div>
                 </div>
+
+                {selectedTenant.verificationStatus === 'pending' && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const res = await api.put(`/tenants/${selectedTenant._id}`, {
+                          verificationStatus: 'verified'
+                        });
+                        setSelectedTenant(res.data.tenant);
+                        fetchProperties();
+                        if (selectedProperty) {
+                          fetchRoomsForProperty(selectedProperty._id);
+                        }
+                        showToast('Tenant verified successfully!', 'success');
+                      } catch (err: any) {
+                        showToast(err.response?.data?.message || 'Failed to verify tenant', 'error');
+                      }
+                    }}
+                    className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md transition-all flex items-center justify-center gap-1"
+                  >
+                    Verify Tenant & Activate
+                  </button>
+                )}
 
                 <div className="space-y-3">
                   <h5 className="text-xs font-bold uppercase tracking-wider text-slate-400">Contact & Info</h5>
@@ -2426,7 +2653,7 @@ export default function PropertiesPage() {
                 setIsAssignModalOpen(false);
                 resetAssignForm();
               }}
-              className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+              className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-655 dark:hover:text-slate-350"
               type="button"
             >
               <X className="w-5 h-5" />
@@ -2437,7 +2664,7 @@ export default function PropertiesPage() {
               <h3 className="text-xl font-bold mt-0.5 flex items-center gap-1.5">
                 <BedDouble className="w-5 h-5 text-primary" /> Assign Tenant
               </h3>
-              <p className="text-xs text-slate-550 dark:text-slate-450 mt-1">
+              <p className="text-xs text-slate-550 dark:text-slate-455 mt-1">
                 Allocating space at <span className="font-bold text-slate-700 dark:text-slate-300">{assigningContext.propertyName}</span> &rarr; <span className="font-bold text-slate-700 dark:text-slate-300">Room {assigningContext.roomNumber}</span> ({assigningContext.bedNumber.split('-').pop()})
               </p>
             </div>
@@ -2446,7 +2673,7 @@ export default function PropertiesPage() {
               <div>
                 <label className="block text-xs font-bold mb-1.5 uppercase text-slate-500 dark:text-slate-400">Select Unallocated Tenant</label>
                 {unassignedTenants.length === 0 ? (
-                  <div className="p-4 bg-slate-50 dark:bg-slate-950 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl text-center text-xs text-slate-500 italic">
+                  <div className="p-4 bg-slate-50 dark:bg-slate-950 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl text-center text-xs text-slate-555 italic">
                     No unallocated tenants found.
                   </div>
                 ) : (
@@ -2466,6 +2693,25 @@ export default function PropertiesPage() {
                 )}
               </div>
 
+              {/* Custom rent for PG rooms */}
+              <div>
+                <label className="block text-xs font-bold mb-1.5 uppercase text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                  <IndianRupee className="w-3.5 h-3.5" /> Custom Monthly Rent (Optional)
+                </label>
+                <div className="relative">
+                  <IndianRupee className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
+                  <input
+                    type="number"
+                    value={assignCustomRent}
+                    onChange={(e) => setAssignCustomRent(e.target.value ? parseInt(e.target.value) : '')}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary"
+                    placeholder="Leave empty to use default room rent"
+                    min={0}
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">If left empty, the default room/bed rent will be used.</p>
+              </div>
+
               <button
                 type="submit"
                 disabled={submitting || !selectedTenantToAssign}
@@ -2476,7 +2722,7 @@ export default function PropertiesPage() {
             </form>
 
             <div className="mt-6 pt-5 border-t border-slate-150 dark:border-slate-800 text-center">
-              <p className="text-xs text-slate-400 mb-3">Don't see your tenant? Register or invite them first.</p>
+              <p className="text-xs text-slate-500 dark:text-slate-450 mb-3">Don't see your tenant? Register or invite them first.</p>
               <button
                 type="button"
                 onClick={() => {
@@ -2484,17 +2730,16 @@ export default function PropertiesPage() {
                   resetAssignForm();
                   router.push('/dashboard/owner/tenants');
                 }}
-                className="w-full py-2.5 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-950/40 dark:text-slate-400 text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+                className="w-full py-3 bg-primary hover:bg-primary-hover text-white rounded-xl text-xs font-extrabold shadow-md shadow-primary/20 transition-all hover:scale-[1.01] flex items-center justify-center gap-1.5"
               >
                 <Plus className="w-3.5 h-3.5" />
-                Go to Tenants Registry
+                Register new Tenant
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Subscription Payment Modal ── */}
       {isLicensingModalOpen && canAssignDetails && assigningContext && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative text-slate-900 dark:text-white">
@@ -2617,25 +2862,193 @@ export default function PropertiesPage() {
       {/* Unassign Confirmation Modal */}
       {isUnassignModalOpen && tenantToUnassign && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-md shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-lg shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
             <div className="flex justify-between items-center p-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
               <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-rose-500" />
-                Unassign Tenant
+                Unassign / Checkout Tenant
               </h3>
-              <button onClick={() => { setIsUnassignModalOpen(false); setTenantToUnassign(null); }} className="text-slate-400 hover:text-slate-600 transition-colors">
+              <button onClick={closeUnassignModal} className="text-slate-400 hover:text-slate-655 dark:hover:text-slate-300 transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-5">
-              <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
-                Are you sure you want to unassign <span className="font-bold text-slate-900 dark:text-white">{tenantToUnassign.fullName}</span> from this property? They will be moved to the unassigned list.
+
+            <div className="p-5 overflow-y-auto max-h-[80vh] space-y-5">
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                Choose an action for tenant <span className="font-bold text-slate-900 dark:text-white">{tenantToUnassign.fullName}</span>.
               </p>
 
-              <div className="flex justify-end gap-3">
+              {/* Action Selection */}
+              <div className="grid grid-cols-2 gap-4">
                 <button
                   type="button"
-                  onClick={() => { setIsUnassignModalOpen(false); setTenantToUnassign(null); }}
+                  onClick={() => setUnassignMode('unassign')}
+                  className={`p-4 rounded-xl border text-left transition-all ${unassignMode === 'unassign'
+                    ? 'border-primary bg-primary/5 dark:bg-primary/10 ring-1 ring-primary'
+                    : 'border-slate-200 dark:border-slate-800 bg-transparent hover:bg-slate-50 dark:hover:bg-slate-955/40'
+                    }`}
+                >
+                  <div className="font-bold text-sm text-slate-955 dark:text-white">Unassign & Relocate</div>
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-normal">
+                    Temporarily unassign from this bed/room. You can reassign them later.
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setUnassignMode('checkout')}
+                  className={`p-4 rounded-xl border text-left transition-all ${unassignMode === 'checkout'
+                    ? 'border-rose-500 bg-rose-500/5 dark:bg-rose-500/10 ring-1 ring-rose-500'
+                    : 'border-slate-200 dark:border-slate-800 bg-transparent hover:bg-slate-50 dark:hover:bg-slate-955/40'
+                    }`}
+                >
+                  <div className="font-bold text-sm text-slate-955 dark:text-white">Checkout & Review</div>
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-normal">
+                    Permanently check out tenant. Rate their behavior and give a description review.
+                  </div>
+                </button>
+              </div>
+
+              {/* Conditional Checkout details */}
+              {unassignMode === 'checkout' && (
+                <div className="space-y-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 animate-in slide-in-from-top-4 duration-200">
+                  <div>
+                    <label className="block text-xs font-bold uppercase text-slate-550 dark:text-slate-400 mb-2">
+                      Tenant Rating
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button
+                          key={star}
+                          type="button"
+                          onClick={() => setCheckoutRating(star)}
+                          className="text-amber-400 hover:scale-110 transition-transform"
+                        >
+                          <Star
+                            className={`w-6 h-6 ${star <= checkoutRating
+                              ? 'fill-amber-400 stroke-amber-400'
+                              : 'stroke-slate-350 dark:stroke-slate-650'
+                              }`}
+                          />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase text-slate-550 dark:text-slate-400 mb-2">
+                      Feedback / Review Description
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={checkoutFeedback}
+                      onChange={(e) => setCheckoutFeedback(e.target.value)}
+                      placeholder="Enter feedback description about cleanliness, payments, behavior etc."
+                      className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent focus:outline-none focus:ring-1 focus:ring-rose-500 text-slate-900 dark:text-white outline-none resize-none"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {unassignMode === 'unassign' && (
+                <div className="space-y-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 animate-in slide-in-from-top-4 duration-200">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={relocateImmediately}
+                      onChange={(e) => {
+                        setRelocateImmediately(e.target.checked);
+                        if (e.target.checked && selectedProperty) {
+                          handleRelocatePropertyChange(selectedProperty._id);
+                        }
+                      }}
+                      className="rounded border-slate-300 text-primary focus:ring-primary w-4 h-4"
+                    />
+                    <span className="text-sm font-bold text-slate-800 dark:text-slate-200">Relocate occupant immediately to another space</span>
+                  </label>
+
+                  {relocateImmediately && (
+                    <div className="space-y-3 pt-2 animate-fade-in">
+                      {/* Property select */}
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 mb-1.5">Property</label>
+                        <select
+                          value={relocatePropertyId}
+                          onChange={(e) => handleRelocatePropertyChange(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-xs dark:bg-slate-900 text-slate-900 dark:text-white outline-none"
+                        >
+                          <option value="">-- Select Property --</option>
+                          {properties.map((p) => (
+                            <option key={p._id} value={p._id}>{p.propertyName}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Room select */}
+                      {relocatePropertyId && (
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 mb-1.5">Room</label>
+                          <select
+                            value={relocateRoomId}
+                            onChange={(e) => {
+                              setRelocateRoomId(e.target.value);
+                              setRelocateBedId('');
+                            }}
+                            className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-xs dark:bg-slate-900 text-slate-900 dark:text-white outline-none"
+                          >
+                            <option value="">-- Select Room --</option>
+                            {(propertyRooms[relocatePropertyId] || [])
+                              .filter((r: any) => {
+                                // Filter rooms with vacancy
+                                if (r.roomType === 'flat') {
+                                  const occupied = r.beds?.filter((b: any) => b.isOccupied) || [];
+                                  return occupied.length < r.bedCapacity;
+                                } else {
+                                  const vacant = r.beds?.filter((b: any) => !b.isOccupied) || [];
+                                  return vacant.length > 0;
+                                }
+                              })
+                              .map((r: any) => (
+                                <option key={r._id} value={r._id}>
+                                  Room {r.roomNumber} ({r.roomType === 'flat' ? 'Flat' : 'PG'})
+                                </option>
+                              ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Bed select (only for PG) */}
+                      {relocateRoomId && (() => {
+                        const selectedRoom = (propertyRooms[relocatePropertyId] || []).find((r: any) => r._id === relocateRoomId);
+                        if (selectedRoom?.roomType !== 'pg') return null;
+                        const vacantBeds = selectedRoom.beds?.filter((b: any) => !b.isOccupied) || [];
+                        return (
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 mb-1.5">Bed</label>
+                            <select
+                              value={relocateBedId}
+                              onChange={(e) => setRelocateBedId(e.target.value)}
+                              className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-xs dark:bg-slate-900 text-slate-900 dark:text-white outline-none"
+                            >
+                              <option value="">-- Select Bed --</option>
+                              {vacantBeds.map((b: any) => (
+                                <option key={b._id} value={b._id}>
+                                  {b.bedNumber.split('-').pop()}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={closeUnassignModal}
                   className="px-4 py-2 text-sm font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
                 >
                   Cancel
@@ -2644,9 +3057,23 @@ export default function PropertiesPage() {
                   type="button"
                   onClick={handleUnassignTenant}
                   disabled={submitting}
-                  className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white text-sm font-bold rounded-xl shadow-md shadow-rose-500/20 disabled:opacity-50 transition-all flex items-center gap-2"
+                  className={`px-5 py-2 text-white text-sm font-bold rounded-xl transition-all flex items-center gap-2 shadow-md ${unassignMode === 'checkout'
+                    ? 'bg-rose-50 hover:bg-rose-600 shadow-rose-500/20'
+                    : 'bg-primary hover:bg-primary-hover shadow-primary/20'
+                    }`}
                 >
-                  {submitting ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Processing...</> : 'Unassign'}
+                  {submitting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Processing...
+                    </>
+                  ) : unassignMode === 'checkout' ? (
+                    'Check Out & Review'
+                  ) : relocateImmediately ? (
+                    'Relocate Tenant'
+                  ) : (
+                    'Unassign Tenant'
+                  )}
                 </button>
               </div>
             </div>
@@ -2714,6 +3141,217 @@ export default function PropertiesPage() {
         </div>
       )}
 
+      {/* ── Edit Room Modal ── */}
+      {isRoomEditModalOpen && editingRoom && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative text-slate-900 dark:text-white max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={handleCloseRoomEdit}
+              className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+              type="button"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="mb-6 pr-10">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Room Configuration</span>
+              <h3 className="text-xl font-bold mt-0.5 flex items-center gap-1.5">
+                <Pencil className="w-5 h-5 text-primary" /> Edit Room {editingRoom.roomNumber}
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Modify monthly rent and occupancy details for this room unit.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold mb-1.5 uppercase text-slate-500 dark:text-slate-450 flex items-center gap-1">
+                  <IndianRupee className="w-3.5 h-3.5" /> {editingRoom.roomType === 'flat' ? 'Monthly Rent (INR)' : 'Monthly Rent Per Bed'}
+                </label>
+                <div className="relative">
+                  <IndianRupee className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
+                  <input
+                    type="number"
+                    value={editRent}
+                    onChange={(e) => setEditRent(parseInt(e.target.value) || 0)}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-primary text-slate-900 dark:text-white outline-none"
+                    min={0}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold mb-1.5 uppercase text-slate-500 dark:text-slate-450">
+                  {editingRoom.roomType === 'flat' ? 'Max Occupants (Persons)' : 'Bed Capacity'}
+                </label>
+                <input
+                  type="number"
+                  value={editBedCapacity}
+                  onChange={(e) => setEditBedCapacity(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-primary text-slate-900 dark:text-white outline-none"
+                  min={1}
+                  required
+                />
+              </div>
+
+              {/* Filter fields in Edit Room */}
+              {editingRoom.roomType === 'flat' && (
+                <div>
+                  <label className="block text-xs font-bold mb-2 uppercase text-slate-500 dark:text-slate-450">Flat Category</label>
+                  <div className="flex flex-wrap gap-2">
+                    {['1RK', '1BHK', '2BHK', '3BHK', '4BHK'].map((cat) => (
+                      <button key={cat} type="button"
+                        onClick={() => setEditFlatCategory(editFlatCategory === cat ? '' : cat)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${editFlatCategory === cat
+                            ? 'bg-primary text-white border-primary shadow-md shadow-primary/20'
+                            : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-primary/50'
+                          }`}>{cat}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold mb-2 uppercase text-slate-500 dark:text-slate-450">Property Type</label>
+                <div className="flex flex-wrap gap-2">
+                  {['Fully Independent', 'Owner Free', 'Living Couple', 'Student Allowed'].map((pt) => (
+                    <button key={pt} type="button"
+                      onClick={() => setEditPropertyType((prev: string[]) => prev.includes(pt) ? prev.filter((x: string) => x !== pt) : [...prev, pt])}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${editPropertyType.includes(pt)
+                          ? 'bg-violet-500 text-white border-violet-500 shadow-md shadow-violet-500/20'
+                          : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-violet-400/50'
+                        }`}>{pt}</button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold mb-2 uppercase text-slate-500 dark:text-slate-450">Preferred Tenant</label>
+                <div className="flex flex-wrap gap-2">
+                  {['All', 'Boys', 'Boys & Girls', 'Company', 'Family', 'Family & Boys', 'Family & Girls', 'Girls'].map((tt) => (
+                    <button key={tt} type="button"
+                      onClick={() => setEditPreferredTenant((prev: string[]) => prev.includes(tt) ? prev.filter((x: string) => x !== tt) : [...prev, tt])}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${editPreferredTenant.includes(tt)
+                          ? 'bg-sky-500 text-white border-sky-500 shadow-md shadow-sky-500/20'
+                          : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-sky-400/50'
+                        }`}>{tt}</button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold mb-2 uppercase text-slate-500 dark:text-slate-450">Furnished Type</label>
+                <div className="flex flex-wrap gap-2">
+                  {['Fully Furnished', 'Semi Furnished', 'Unfurnished'].map((ft) => (
+                    <button key={ft} type="button"
+                      onClick={() => setEditFurnishedType(editFurnishedType === ft ? '' : ft)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${editFurnishedType === ft
+                          ? 'bg-amber-500 text-white border-amber-500 shadow-md shadow-amber-500/20'
+                          : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-amber-400/50'
+                        }`}>{ft}</button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={handleCloseRoomEdit}
+                  className="flex-1 py-3 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-950/40 rounded-xl text-xs font-bold transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => selectedProperty && handleSaveRoom(editingRoom._id, selectedProperty._id)}
+                  disabled={savingRoomId === editingRoom._id}
+                  className="flex-1 py-3 bg-primary hover:bg-primary-hover text-white rounded-xl text-xs font-bold shadow-md shadow-primary/20 disabled:opacity-50 transition-all flex items-center justify-center gap-1.5"
+                >
+                  {savingRoomId === editingRoom._id ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    'Save Changes'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Edit Tenant Rent Modal ── */}
+      {isTenantRentModalOpen && editingRentTenant && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative text-slate-900 dark:text-white">
+            <button
+              onClick={handleCloseTenantRentEdit}
+              className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+              type="button"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="mb-6 pr-10">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Rent Adjustment</span>
+              <h3 className="text-xl font-bold mt-0.5 flex items-center gap-1.5">
+                <Pencil className="w-5 h-5 text-primary" /> Adjust Rent
+              </h3>
+              <p className="text-xs text-slate-505 dark:text-slate-450 mt-1">
+                Customize the rent amount for <span className="font-bold text-slate-850 dark:text-slate-200">{editingRentTenant.fullName}</span>.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold mb-1.5 uppercase text-slate-500 dark:text-slate-450 flex items-center gap-1">
+                  <IndianRupee className="w-3.5 h-3.5" /> Monthly Rent (INR)
+                </label>
+                <div className="relative">
+                  <IndianRupee className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
+                  <input
+                    type="number"
+                    value={editRentAmount}
+                    onChange={(e) => setEditRentAmount(parseInt(e.target.value) || 0)}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-primary text-slate-900 dark:text-white outline-none"
+                    min={0}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={handleCloseTenantRentEdit}
+                  className="flex-1 py-3 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-955/40 rounded-xl text-xs font-bold transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSaveTenantRent(editingRentTenant._id)}
+                  disabled={savingRentTenantId === editingRentTenant._id}
+                  className="flex-1 py-3 bg-primary hover:bg-primary-hover text-white rounded-xl text-xs font-bold shadow-md shadow-primary/20 disabled:opacity-50 transition-all flex items-center justify-center gap-1.5"
+                >
+                  {savingRentTenantId === editingRentTenant._id ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    'Save Rent'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Reactivate Connection Modal */}
       {isReactivateModalOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 backdrop-blur-sm p-4 animate-in fade-in duration-200">
@@ -2737,7 +3375,7 @@ export default function PropertiesPage() {
               <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
                 This user already exists in the system (inactive connection). Would you like to reactivate this connection?
               </p>
-              
+
               <div className="flex justify-end gap-3">
                 <button
                   type="button"

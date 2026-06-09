@@ -10,10 +10,20 @@ export interface User {
   createdAt: string;
 }
 
+export interface PropertyAddress {
+  pincode: string;
+  flatNo: string;
+  area: string;
+  landmark: string;
+  city: string;
+  state: string;
+}
+
 export interface Property {
   _id: string;
   propertyName: string;
-  address: string;
+  address: PropertyAddress;
+  fullAddress?: string;
   description: string;
   images: string[];
   totalRooms: number;
@@ -29,6 +39,10 @@ export interface Room {
   occupancyStatus: 'vacant' | 'partially_occupied' | 'fully_occupied';
   monthlyRent: number;
   roomType?: 'flat' | 'pg';
+  flatCategory?: string;
+  propertyType?: string[];
+  preferredTenant?: string[];
+  furnishedType?: string;
   createdAt: string;
   beds?: any[];
 }
@@ -60,7 +74,8 @@ export interface Tenant {
   assignedProperty: {
     _id: string;
     propertyName: string;
-    address: string;
+    address: PropertyAddress;
+    fullAddress?: string;
   } | null;
   assignedRoom: {
     _id: string;
@@ -98,7 +113,8 @@ export interface Agreement {
   property: {
     _id: string;
     propertyName: string;
-    address: string;
+    address: PropertyAddress;
+    fullAddress?: string;
   };
   room: {
     _id: string;
@@ -181,5 +197,12 @@ export interface VerificationLog {
   };
   riskLevel: 'low' | 'medium' | 'high';
   status: 'verified' | 'failed';
+  searchCriteria?: {
+    aadhaarNumber?: string;
+    panNumber?: string;
+    phone?: string;
+    fullName?: string;
+  };
+  operator?: 'and' | 'or';
   createdAt: string;
 }

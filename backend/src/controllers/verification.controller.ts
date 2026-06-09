@@ -16,6 +16,9 @@ interface IMockReview {
 // Static seed registry for simulated Aadhaar records
 const MOCK_AADHAAR_REGISTRY: Record<string, {
   fullName: string;
+  aadhaarNumber: string;
+  panNumber: string;
+  phone: string;
   previousRating: number;
   creditScore: number;
   riskLevel: 'low' | 'medium' | 'high';
@@ -27,6 +30,9 @@ const MOCK_AADHAAR_REGISTRY: Record<string, {
 }> = {
   '123456789012': {
     fullName: 'Arjun Kumar',
+    aadhaarNumber: '123456789012',
+    panNumber: 'ABCDE1234F',
+    phone: '9876500001',
     previousRating: 4.8,
     creditScore: 810,
     riskLevel: 'low',
@@ -44,6 +50,9 @@ const MOCK_AADHAAR_REGISTRY: Record<string, {
   },
   '987654321098': {
     fullName: 'Rohan Sharma',
+    aadhaarNumber: '987654321098',
+    panNumber: 'XYZWR9876Q',
+    phone: '9876500002',
     previousRating: 2.1,
     creditScore: 450,
     riskLevel: 'high',
@@ -62,6 +71,9 @@ const MOCK_AADHAAR_REGISTRY: Record<string, {
   },
   '555566667777': {
     fullName: 'Priya Patel',
+    aadhaarNumber: '555566667777',
+    panNumber: 'LMNOP5555Z',
+    phone: '9876500003',
     previousRating: 3.5,
     creditScore: 680,
     riskLevel: 'medium',
@@ -79,6 +91,9 @@ const MOCK_AADHAAR_REGISTRY: Record<string, {
   },
   '111122223333': {
     fullName: 'Amit Verma',
+    aadhaarNumber: '111122223333',
+    panNumber: 'JKLMN1111A',
+    phone: '9876500004',
     previousRating: 1.0,
     creditScore: 320,
     riskLevel: 'high',
@@ -101,16 +116,62 @@ import { updateTenantStatsByAadhaar } from '../utils/scoreHelper.js';
 
 export const verifyAadhaar = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const { aadhaarNumber } = req.body;
+    const { aadhaarNumber, panNumber, phone, fullName: searchName, operator = 'or' } = req.body;
     const requesterId = req.user?.userId;
 
-    if (!aadhaarNumber || aadhaarNumber.length !== 12) {
-      throw new AppError('Aadhaar number must be exactly 12 digits', 400);
+    const trimmedAadhaar = aadhaarNumber ? String(aadhaarNumber).trim() : '';
+    const trimmedPan = panNumber ? String(panNumber).trim().toUpperCase() : '';
+    const trimmedPhone = phone ? String(phone).trim() : '';
+    const trimmedName = searchName ? String(searchName).trim() : '';
+
+    if (!trimmedAadhaar && !trimmedPan && !trimmedPhone && !trimmedName) {
+      throw new AppError('At least one search query field is required', 400);
     }
 
-    // Check if dynamic records exist in DB
-    const dbReviewsCount = await TenantReview.countDocuments({ aadhaarNumber });
-    const dbTenantsCount = await Tenant.countDocuments({ aadhaarNumber });
+    // 1. Search DB for dynamic tenant
+    const dbConditions: any[] = [];
+    if (trimmedAadhaar) dbConditions.push({ aadhaarNumber: trimmedAadhaar });
+    if (trimmedPan) dbConditions.push({ panNumber: trimmedPan });
+    if (trimmedPhone) dbConditions.push({ phone: trimmedPhone });
+    if (trimmedName) dbConditions.push({ fullName: { $regex: new RegExp(trimmedName, 'i') } });
+
+    let existingTenant = null;
+    if (dbConditions.length > 0) {
+      if (operator === 'and') {
+        existingTenant = await Tenant.findOne({ $and: dbConditions }).sort({ createdAt: -1 });
+      } else {
+        existingTenant = await Tenant.findOne({ $or: dbConditions }).sort({ createdAt: -1 });
+      }
+    }
+
+    // 2. Search simulated mock registry if not found in DB
+    let mockResult = null;
+    const mockList = Object.values(MOCK_AADHAAR_REGISTRY);
+
+    if (operator === 'and') {
+      mockResult = mockList.find(m => {
+        const matches: boolean[] = [];
+        if (trimmedAadhaar) matches.push(m.aadhaarNumber === trimmedAadhaar);
+        if (trimmedPan) matches.push(m.panNumber === trimmedPan);
+        if (trimmedPhone) matches.push(m.phone === trimmedPhone);
+        if (trimmedName) matches.push(m.fullName.toLowerCase().includes(trimmedName.toLowerCase()));
+        return matches.length > 0 && matches.every(Boolean);
+      });
+    } else {
+      mockResult = mockList.find(m => {
+        if (trimmedAadhaar && m.aadhaarNumber === trimmedAadhaar) return true;
+        if (trimmedPan && m.panNumber === trimmedPan) return true;
+        if (trimmedPhone && m.phone === trimmedPhone) return true;
+        if (trimmedName && m.fullName.toLowerCase().includes(trimmedName.toLowerCase())) return true;
+        return false;
+      });
+    }
+
+    const derivedAadhaar = existingTenant?.aadhaarNumber || mockResult?.aadhaarNumber || trimmedAadhaar || '000000000000';
+
+    // Check dynamic reviews/tenants based on derived Aadhaar
+    const dbReviewsCount = await TenantReview.countDocuments({ aadhaarNumber: derivedAadhaar });
+    const dbTenantsCount = await Tenant.countDocuments({ aadhaarNumber: derivedAadhaar });
     
     let result: {
       fullName: string;
@@ -125,22 +186,22 @@ export const verifyAadhaar = async (req: AuthenticatedRequest, res: Response, ne
 
     if (dbReviewsCount > 0 || dbTenantsCount > 0) {
       // Calculate dynamic score and update all tenants
-      const stats = await updateTenantStatsByAadhaar(aadhaarNumber);
+      const stats = await updateTenantStatsByAadhaar(derivedAadhaar);
       
       // Get the name from first matching review or tenant
-      let fullName = 'Verified Tenant';
-      const firstTenant = await Tenant.findOne({ aadhaarNumber });
+      let fullNameVal = 'Verified Tenant';
+      const firstTenant = await Tenant.findOne({ aadhaarNumber: derivedAadhaar });
       if (firstTenant) {
-        fullName = firstTenant.fullName;
+        fullNameVal = firstTenant.fullName;
       } else {
-        const firstReview = await TenantReview.findOne({ aadhaarNumber });
+        const firstReview = await TenantReview.findOne({ aadhaarNumber: derivedAadhaar });
         if (firstReview) {
-          fullName = firstReview.tenantName;
+          fullNameVal = firstReview.tenantName;
         }
       }
 
       result = {
-        fullName,
+        fullName: fullNameVal,
         previousRating: stats.averageRating,
         creditScore: stats.score,
         riskLevel: stats.riskLevel,
@@ -150,7 +211,6 @@ export const verifyAadhaar = async (req: AuthenticatedRequest, res: Response, ne
       };
     } else {
       // Fallback: Lookup in our simulated registry
-      const mockResult = MOCK_AADHAAR_REGISTRY[aadhaarNumber];
       if (mockResult) {
         result = {
           fullName: mockResult.fullName,
@@ -165,7 +225,7 @@ export const verifyAadhaar = async (req: AuthenticatedRequest, res: Response, ne
       } else {
         // Default brand new clean profile
         result = {
-          fullName: 'New Tenant Record',
+          fullName: trimmedName || 'New Tenant Record',
           previousRating: 5.0,
           creditScore: 700,
           riskLevel: 'low',
@@ -177,8 +237,17 @@ export const verifyAadhaar = async (req: AuthenticatedRequest, res: Response, ne
     }
 
     // Write to audit logs
+    const searchCriteria = {
+      aadhaarNumber: trimmedAadhaar,
+      panNumber: trimmedPan,
+      phone: trimmedPhone,
+      fullName: trimmedName
+    };
+
     const log = await VerificationLog.create({
-      aadhaarNumber,
+      aadhaarNumber: derivedAadhaar,
+      searchCriteria,
+      operator,
       requester: requesterId,
       result,
       riskLevel: result.riskLevel,
@@ -187,7 +256,7 @@ export const verifyAadhaar = async (req: AuthenticatedRequest, res: Response, ne
 
     // Update matching tenant ratings & verificationStatus if they exist in the DB
     await Tenant.updateMany(
-      { aadhaarNumber },
+      { aadhaarNumber: derivedAadhaar },
       {
         $set: {
           verificationStatus: result.verificationStatus,
@@ -200,13 +269,20 @@ export const verifyAadhaar = async (req: AuthenticatedRequest, res: Response, ne
     );
 
     // Fetch prefill details if a tenant profile exists in DB
-    const existingTenant = await Tenant.findOne({ aadhaarNumber }).sort({ createdAt: -1 });
-    const isNewTenant = !existingTenant;
+    const latestTenant = await Tenant.findOne({
+      $or: [
+        { aadhaarNumber: derivedAadhaar },
+        ...(trimmedPan ? [{ panNumber: trimmedPan }] : []),
+        ...(trimmedPhone ? [{ phone: trimmedPhone }] : [])
+      ]
+    }).sort({ createdAt: -1 });
+
+    const isNewTenant = !latestTenant;
 
     let connectionExists = false;
     let connectionStatus: 'active' | 'inactive' | null = null;
-    if (existingTenant) {
-      const connection = await TenantOwnerConnection.findOne({ tenant: existingTenant._id, owner: requesterId });
+    if (latestTenant) {
+      const connection = await TenantOwnerConnection.findOne({ tenant: latestTenant._id, owner: requesterId });
       if (connection) {
         connectionExists = true;
         connectionStatus = connection.isDeleted ? 'inactive' : 'active';
@@ -214,17 +290,19 @@ export const verifyAadhaar = async (req: AuthenticatedRequest, res: Response, ne
     }
 
     const prefill = {
-      fullName: existingTenant?.fullName || (MOCK_AADHAAR_REGISTRY[aadhaarNumber]?.fullName || ''),
-      email: existingTenant?.email || '',
-      phone: existingTenant?.phone || '',
-      emergencyContact: existingTenant?.emergencyContact || '',
-      occupation: existingTenant?.occupation || '',
-      address: existingTenant?.address || ''
+      fullName: latestTenant?.fullName || mockResult?.fullName || trimmedName || '',
+      email: latestTenant?.email || '',
+      phone: latestTenant?.phone || mockResult?.phone || trimmedPhone || '',
+      emergencyContact: latestTenant?.emergencyContact || '',
+      occupation: latestTenant?.occupation || '',
+      address: latestTenant?.address || '',
+      panNumber: latestTenant?.panNumber || mockResult?.panNumber || trimmedPan || '',
+      aadhaarNumber: latestTenant?.aadhaarNumber || mockResult?.aadhaarNumber || trimmedAadhaar || ''
     };
 
     // Get the last 3 reviews to return
     let reviewsList: IMockReview[] = [];
-    const dbReviews = await TenantReview.find({ aadhaarNumber })
+    const dbReviews = await TenantReview.find({ aadhaarNumber: derivedAadhaar })
       .populate('owner', 'fullName')
       .sort({ createdAt: -1 })
       .limit(3);
@@ -237,7 +315,7 @@ export const verifyAadhaar = async (req: AuthenticatedRequest, res: Response, ne
         createdAt: r.createdAt
       }));
     } else {
-      reviewsList = MOCK_AADHAAR_REGISTRY[aadhaarNumber]?.reviews || [
+      reviewsList = mockResult?.reviews || [
         {
           rating: 5,
           feedback: 'No previous owner reviews registered.',

@@ -34,6 +34,7 @@ export default function TenantInvitePage() {
   const [emergencyContact, setEmergencyContact] = useState('');
   const [occupation, setOccupation] = useState('');
   const [address, setAddress] = useState('');
+  const [panNumber, setPanNumber] = useState('');
 
   useEffect(() => {
     const fetchInvite = async () => {
@@ -63,6 +64,7 @@ export default function TenantInvitePage() {
         fullName,
         email,
         phone,
+        panNumber,
         emergencyContact,
         occupation,
         address
@@ -169,16 +171,29 @@ export default function TenantInvitePage() {
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Invitation Email</label>
-                  <div className="relative">
-                    <Mail className="absolute left-3.5 top-3.5 w-4 h-4 text-slate-500" />
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Invitation Email</label>
+                    <div className="relative">
+                      <Mail className="absolute left-3.5 top-3.5 w-4 h-4 text-slate-500" />
+                      <input
+                        type="email"
+                        value={email}
+                        readOnly
+                        className="w-full pl-10 pr-4 py-3 rounded-xl border border-white/10 bg-white/5 text-sm outline-none text-slate-400 cursor-not-allowed select-none bg-slate-950/40"
+                        title="Email is fixed to the address where the invite was sent"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">PAN Card Number</label>
                     <input
-                      type="email"
-                      value={email}
-                      readOnly
-                      className="w-full pl-10 pr-4 py-3 rounded-xl border border-white/10 bg-white/5 text-sm outline-none text-slate-400 cursor-not-allowed select-none bg-slate-950/40"
-                      title="Email is fixed to the address where the invite was sent"
+                      type="text"
+                      maxLength={10}
+                      value={panNumber}
+                      onChange={(e) => setPanNumber(e.target.value.toUpperCase())}
+                      className="w-full px-4 py-3 rounded-xl border border-white/10 bg-white/5 text-sm outline-none focus:ring-2 focus:ring-primary/30 text-white placeholder-slate-500"
+                      placeholder="e.g. ABCDE1234F"
                     />
                   </div>
                 </div>

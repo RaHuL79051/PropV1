@@ -43,6 +43,14 @@ export default function AdminTenantsPage() {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteUrl, setInviteUrl] = useState('');
 
+  // Expanded search query states
+  const [searchAadhaar, setSearchAadhaar] = useState('');
+  const [searchPan, setSearchPan] = useState('');
+  const [searchPhone, setSearchPhone] = useState('');
+  const [searchName, setSearchName] = useState('');
+  const [searchOperator, setSearchOperator] = useState<'or' | 'and'>('or');
+  const [panNumber, setPanNumber] = useState('');
+
   // Form states
   const getTodayDateString = () => {
     const today = new Date();
@@ -83,14 +91,45 @@ export default function AdminTenantsPage() {
   };
 
   const handleVerifyAadhaar = async () => {
-    if (!aadhaarNumber || aadhaarNumber.length !== 12 || !/^\d+$/.test(aadhaarNumber)) {
+    const cleanAadhaar = searchAadhaar.trim();
+    const cleanPan = searchPan.trim().toUpperCase();
+    const cleanPhone = searchPhone.trim();
+    const cleanName = searchName.trim();
+
+    if (!cleanAadhaar && !cleanPan && !cleanPhone && !cleanName) {
+      showToast('Please enter at least one search query field', 'error');
+      return;
+    }
+
+    if (cleanAadhaar && (cleanAadhaar.length !== 12 || isNaN(Number(cleanAadhaar)))) {
       showToast('Aadhaar number must be exactly 12 digits', 'error');
+      return;
+    }
+
+    if (cleanPan && cleanPan.length !== 10) {
+      showToast('PAN card number must be exactly 10 characters', 'error');
+      return;
+    }
+
+    if (cleanPhone && (cleanPhone.length !== 10 || isNaN(Number(cleanPhone)))) {
+      showToast('Phone number must be exactly 10 digits', 'error');
+      return;
+    }
+
+    if (cleanName && cleanName.length < 2) {
+      showToast('Name must be at least 2 characters', 'error');
       return;
     }
 
     setAadhaarVerifying(true);
     try {
-      const res = await api.post('/verification/verify', { aadhaarNumber });
+      const res = await api.post('/verification/verify', {
+        aadhaarNumber: cleanAadhaar,
+        panNumber: cleanPan,
+        phone: cleanPhone,
+        fullName: cleanName,
+        operator: searchOperator
+      });
 
       if (res.data.connectionStatus === 'active') {
         showToast('Tenant is already active in your registry', 'error');
@@ -99,16 +138,16 @@ export default function AdminTenantsPage() {
       }
 
       if (res.data.connectionStatus === 'inactive') {
-        setReactivateAadhaar(aadhaarNumber);
+        setReactivateAadhaar(res.data.prefill.aadhaarNumber || cleanAadhaar);
         setIsReactivateModalOpen(true);
         setVerificationResult(null);
         return;
       }
 
       setVerificationResult(res.data);
-      showToast('Aadhaar verification report retrieved successfully', 'success');
+      showToast('Tenant verification report retrieved successfully', 'success');
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to retrieve Aadhaar verification report', 'error');
+      showToast(err.response?.data?.message || 'Failed to retrieve verification report', 'error');
     } finally {
       setAadhaarVerifying(false);
     }
@@ -137,8 +176,10 @@ export default function AdminTenantsPage() {
     if (!verificationResult) return;
     const { prefill } = verificationResult;
     setFullName(prefill.fullName || '');
+    setAadhaarNumber(prefill.aadhaarNumber || searchAadhaar || '');
+    setPanNumber(prefill.panNumber || searchPan || '');
     setTenantEmail(prefill.email || '');
-    setPhone(prefill.phone || '');
+    setPhone(prefill.phone || searchPhone || '');
     setEmergencyContact(prefill.emergencyContact || '');
     setOccupation(prefill.occupation || '');
     setAddress(prefill.address || '');
@@ -172,6 +213,7 @@ export default function AdminTenantsPage() {
     try {
       const res = await api.post('/tenants/invites', {
         aadhaarNumber,
+        panNumber,
         email: resolvedEmail,
         assignedProperty: selectedPropertyId || null,
         assignedRoom: selectedRoomId || null,
@@ -438,6 +480,7 @@ export default function AdminTenantsPage() {
       await api.post('/tenants', {
         fullName,
         aadhaarNumber,
+        panNumber,
         phone,
         emergencyContact,
         occupation,
@@ -629,6 +672,12 @@ export default function AdminTenantsPage() {
     setInviteEmail('');
     setInviteUrl('');
     setJoiningDate(getTodayDateString());
+    setSearchAadhaar('');
+    setSearchPan('');
+    setSearchPhone('');
+    setSearchName('');
+    setSearchOperator('or');
+    setPanNumber('');
   };
 
   const uniqueTenants = tenants.filter((item, index, self) =>
@@ -969,46 +1018,108 @@ export default function AdminTenantsPage() {
                 <div>
                   <h3 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
                     <ShieldCheck className="w-6 h-6 text-primary animate-pulse-subtle" />
-                    Aadhaar Verification (Step 1 of 2)
+                    Tenant Search & Check (Step 1 of 2)
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    Enter the occupant's Aadhaar number to verify their background and previous reviews.
+                    Enter the occupant's Aadhaar, PAN, phone or name to verify their background and previous reviews.
                   </p>
                 </div>
 
-                <div className="space-y-3">
-                  <label className="block text-xs font-bold uppercase text-slate-500 dark:text-slate-400">
-                    Aadhaar Card Number (12 Digits)
-                  </label>
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <input
-                        type="text"
-                        value={aadhaarNumber}
-                        onChange={(e) => setAadhaarNumber(e.target.value.replace(/\D/g, '').slice(0, 12))}
-                        className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-                        placeholder="Enter 12-digit number"
-                        maxLength={12}
-                      />
-                      <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
-                    </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold mb-1 uppercase tracking-wider text-slate-450">Aadhaar Card Number</label>
+                    <input
+                      type="text"
+                      maxLength={12}
+                      value={searchAadhaar}
+                      onChange={(e) => setSearchAadhaar(e.target.value.replace(/\D/g, ''))}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-xs text-slate-900 dark:text-white outline-none focus:ring-1 focus:ring-primary"
+                      placeholder="e.g. 123456789012"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold mb-1 uppercase tracking-wider text-slate-450">PAN Card Number</label>
+                    <input
+                      type="text"
+                      maxLength={10}
+                      value={searchPan}
+                      onChange={(e) => setSearchPan(e.target.value.toUpperCase())}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-xs text-slate-900 dark:text-white outline-none focus:ring-1 focus:ring-primary"
+                      placeholder="e.g. ABCDE1234F"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold mb-1 uppercase tracking-wider text-slate-450">Phone Number</label>
+                    <input
+                      type="text"
+                      maxLength={10}
+                      value={searchPhone}
+                      onChange={(e) => setSearchPhone(e.target.value.replace(/\D/g, ''))}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-xs text-slate-900 dark:text-white outline-none focus:ring-1 focus:ring-primary"
+                      placeholder="e.g. 9876500001"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold mb-1 uppercase tracking-wider text-slate-450">Tenant Name</label>
+                    <input
+                      type="text"
+                      value={searchName}
+                      onChange={(e) => setSearchName(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-xs text-slate-900 dark:text-white outline-none focus:ring-1 focus:ring-primary"
+                      placeholder="e.g. Arjun Kumar"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold mb-1.5 uppercase tracking-wider text-slate-450 font-semibold">Match Operator</label>
+                  <div className="flex gap-2 p-1 bg-slate-100 dark:bg-slate-950 rounded-xl">
                     <button
                       type="button"
-                      disabled={aadhaarVerifying || aadhaarNumber.length !== 12}
-                      onClick={handleVerifyAadhaar}
-                      className="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-bold shadow-md shadow-primary/20 transition-all hover:scale-[1.02] disabled:opacity-50 disabled:scale-100 flex items-center gap-1.5 shrink-0"
+                      onClick={() => setSearchOperator('or')}
+                      className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                        searchOperator === 'or'
+                          ? 'bg-white dark:bg-slate-900 text-primary shadow-sm'
+                          : 'text-slate-500 hover:text-slate-800 dark:hover:text-white'
+                      }`}
                     >
-                      {aadhaarVerifying ? (
-                        <>
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          Checking...
-                        </>
-                      ) : (
-                        'Check Profile'
-                      )}
+                      Match ANY (OR)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSearchOperator('and')}
+                      className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                        searchOperator === 'and'
+                          ? 'bg-white dark:bg-slate-900 text-primary shadow-sm'
+                          : 'text-slate-500 hover:text-slate-800 dark:hover:text-white'
+                      }`}
+                    >
+                      Match ALL (AND)
                     </button>
                   </div>
                 </div>
+
+                <button
+                  type="button"
+                  disabled={aadhaarVerifying || (!searchAadhaar && !searchPan && !searchPhone && !searchName)}
+                  onClick={handleVerifyAadhaar}
+                  className="w-full py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-bold shadow-md shadow-primary/20 transition-all hover:scale-[1.02] disabled:opacity-50 disabled:scale-100 flex items-center justify-center gap-1.5"
+                >
+                  {aadhaarVerifying ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Checking...
+                    </>
+                  ) : (
+                    <>
+                      <Search className="w-3.5 h-3.5" />
+                      Search & Check Profile
+                    </>
+                  )}
+                </button>
 
                 {verificationResult && (
                   <div className="space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -1248,15 +1359,28 @@ export default function AdminTenantsPage() {
                         </div>
                       </div>
 
-                      <div>
-                        <label className="block text-xs font-bold mb-1 uppercase text-slate-500 dark:text-slate-400">Email</label>
-                        <input
-                          type="email"
-                          value={tenantEmail}
-                          onChange={(e) => setTenantEmail(e.target.value)}
-                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-                          placeholder="tenant@example.com"
-                        />
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-bold mb-1 uppercase text-slate-500 dark:text-slate-400">Email</label>
+                          <input
+                            type="email"
+                            value={tenantEmail}
+                            onChange={(e) => setTenantEmail(e.target.value)}
+                            className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                            placeholder="tenant@example.com"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold mb-1 uppercase text-slate-500 dark:text-slate-400">PAN Card Number</label>
+                          <input
+                            type="text"
+                            maxLength={10}
+                            value={panNumber}
+                            onChange={(e) => setPanNumber(e.target.value.toUpperCase())}
+                            className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                            placeholder="e.g. ABCDE1234F"
+                          />
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">

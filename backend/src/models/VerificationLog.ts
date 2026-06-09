@@ -1,7 +1,9 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IVerificationLog extends Document {
-  aadhaarNumber: string;
+  aadhaarNumber?: string;
+  searchCriteria?: Record<string, any>;
+  operator?: 'and' | 'or';
   requester: mongoose.Types.ObjectId;
   timestamp: Date;
   result: Record<string, any>;
@@ -11,7 +13,9 @@ export interface IVerificationLog extends Document {
 
 const VerificationLogSchema: Schema = new Schema(
   {
-    aadhaarNumber: { type: String, required: true, trim: true },
+    aadhaarNumber: { type: String, default: '', trim: true },
+    searchCriteria: { type: Object, default: {} },
+    operator: { type: String, enum: ['and', 'or'], default: 'or' },
     requester: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     timestamp: { type: Date, default: Date.now },
     result: { type: Object, required: true },

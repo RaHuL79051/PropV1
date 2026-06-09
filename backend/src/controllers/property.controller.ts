@@ -5,16 +5,28 @@ import Bed from '../models/Bed.js';
 import Tenant from '../models/Tenant.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
-import { checkUnpaidPersonsLimit } from './tenant.controller.js';
+import { checkUnpaidPersonsLimit, updateRoomOccupancy } from './tenant.controller.js';
 
 export const createProperty = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const { propertyName, address, description, images, totalRooms = 0, roomType = 'pg', ownerId: bodyOwnerId } = req.body;
     const ownerId = req.user?.role === 'admin' && bodyOwnerId ? bodyOwnerId : req.user?.userId;
 
+    // Build structured address object
+    const structuredAddress = typeof address === 'string'
+      ? { pincode: '', flatNo: '', area: '', landmark: '', city: '', state: '', _legacy: address }
+      : {
+          pincode: address?.pincode || '',
+          flatNo: address?.flatNo || '',
+          area: address?.area || '',
+          landmark: address?.landmark || '',
+          city: address?.city || '',
+          state: address?.state || ''
+        };
+
     const property = await Property.create({
       propertyName,
-      address,
+      address: structuredAddress,
       description,
       images: images || ['https://images.unsplash.com/photo-1564013799919-ab600027ffc6?auto=format&fit=crop&w=800&q=80'],
       totalRooms,
@@ -112,7 +124,21 @@ export const updateProperty = async (req: AuthenticatedRequest, res: Response, n
     }
 
     property.propertyName = propertyName || property.propertyName;
-    property.address = address || property.address;
+    if (address) {
+      if (typeof address === 'string') {
+        // Legacy compatibility: store as-is with city field
+        property.address = { pincode: '', flatNo: '', area: address, landmark: '', city: '', state: '' } as any;
+      } else {
+        property.address = {
+          pincode: address.pincode ?? property.address?.pincode ?? '',
+          flatNo: address.flatNo ?? property.address?.flatNo ?? '',
+          area: address.area ?? property.address?.area ?? '',
+          landmark: address.landmark ?? property.address?.landmark ?? '',
+          city: address.city ?? property.address?.city ?? '',
+          state: address.state ?? property.address?.state ?? ''
+        } as any;
+      }
+    }
     property.description = description || property.description;
     property.images = images || property.images;
     if (totalRooms !== undefined) {
@@ -164,7 +190,7 @@ export const deleteProperty = async (req: AuthenticatedRequest, res: Response, n
 export const addRoom = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const { propertyId } = req.params;
-    const { roomNumber, bedCapacity, monthlyRent, roomType = 'pg' } = req.body;
+    const { roomNumber, bedCapacity, monthlyRent, roomType = 'pg', flatCategory, propertyType, preferredTenant, furnishedType } = req.body;
 
     const property = await Property.findById(propertyId);
     if (!property) {
@@ -177,14 +203,20 @@ export const addRoom = async (req: AuthenticatedRequest, res: Response, next: Ne
 
     const actualCapacity = bedCapacity;
 
-    const room = await Room.create({
+    const roomData: any = {
       property: propertyId,
       roomNumber,
       roomType,
       bedCapacity: actualCapacity,
       occupancyStatus: 'vacant',
       monthlyRent
-    });
+    };
+    if (flatCategory) roomData.flatCategory = flatCategory;
+    if (propertyType && propertyType.length) roomData.propertyType = propertyType;
+    if (preferredTenant && preferredTenant.length) roomData.preferredTenant = preferredTenant;
+    if (furnishedType) roomData.furnishedType = furnishedType;
+
+    const room = await Room.create(roomData);
 
     // Create beds
     const beds = [];
@@ -211,7 +243,7 @@ export const addRoom = async (req: AuthenticatedRequest, res: Response, next: Ne
 export const updateRoom = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const { roomId } = req.params;
-    const { roomNumber, bedCapacity, monthlyRent, agreementDocName, agreementDocData } = req.body;
+    const { roomNumber, bedCapacity, monthlyRent, agreementDocName, agreementDocData, flatCategory, propertyType, preferredTenant, furnishedType } = req.body;
 
     const room = await Room.findById(roomId);
     if (!room) {
@@ -233,6 +265,10 @@ export const updateRoom = async (req: AuthenticatedRequest, res: Response, next:
     room.monthlyRent = monthlyRent !== undefined ? monthlyRent : room.monthlyRent;
     if (agreementDocName !== undefined) room.agreementDocName = agreementDocName;
     if (agreementDocData !== undefined) room.agreementDocData = agreementDocData;
+    if (flatCategory !== undefined) (room as any).flatCategory = flatCategory;
+    if (propertyType !== undefined) (room as any).propertyType = propertyType;
+    if (preferredTenant !== undefined) (room as any).preferredTenant = preferredTenant;
+    if (furnishedType !== undefined) (room as any).furnishedType = furnishedType;
 
     if (bedCapacity !== undefined && bedCapacity !== room.bedCapacity) {
       const currentBeds = await Bed.find({ room: room._id });
@@ -267,6 +303,7 @@ export const updateRoom = async (req: AuthenticatedRequest, res: Response, next:
     }
 
     await room.save();
+    await updateRoomOccupancy(room._id.toString());
     return res.status(200).json({ message: 'Room updated successfully', room });
   } catch (error) {
     next(error);

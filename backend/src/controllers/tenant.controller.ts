@@ -92,6 +92,7 @@ export const createTenant = async (req: AuthenticatedRequest, res: Response, nex
     const {
       fullName,
       aadhaarNumber,
+      panNumber,
       email,
       phone,
       emergencyContact,
@@ -128,6 +129,7 @@ export const createTenant = async (req: AuthenticatedRequest, res: Response, nex
       tenant = new Tenant({
         fullName,
         aadhaarNumber,
+        panNumber: panNumber || '',
         email: email || '',
         phone,
         emergencyContact,
@@ -146,6 +148,7 @@ export const createTenant = async (req: AuthenticatedRequest, res: Response, nex
     } else {
       // Update tenant details if they already exist globally
       tenant.fullName = fullName || tenant.fullName;
+      tenant.panNumber = panNumber || tenant.panNumber || '';
       tenant.email = email || tenant.email;
       tenant.phone = phone || tenant.phone;
       tenant.emergencyContact = emergencyContact || tenant.emergencyContact;
@@ -268,6 +271,7 @@ export const updateTenant = async (req: AuthenticatedRequest, res: Response, nex
     const { id } = req.params;
     const {
       fullName,
+      panNumber,
       phone,
       emergencyContact,
       occupation,
@@ -275,7 +279,8 @@ export const updateTenant = async (req: AuthenticatedRequest, res: Response, nex
       assignedProperty,
       assignedRoom,
       assignedBed,
-      rentAmount
+      rentAmount,
+      verificationStatus
     } = req.body;
     const ownerId = req.user?.userId;
 
@@ -300,6 +305,9 @@ export const updateTenant = async (req: AuthenticatedRequest, res: Response, nex
     }
 
     tenant.fullName = fullName || tenant.fullName;
+    if (panNumber !== undefined) {
+      tenant.panNumber = panNumber;
+    }
     tenant.email = req.body.email || tenant.email;
     tenant.phone = phone || tenant.phone;
     tenant.emergencyContact = emergencyContact || tenant.emergencyContact;
@@ -307,6 +315,9 @@ export const updateTenant = async (req: AuthenticatedRequest, res: Response, nex
     tenant.address = address || tenant.address;
     if (rentAmount !== undefined) {
       tenant.rentAmount = rentAmount || null;
+    }
+    if (verificationStatus !== undefined) {
+      tenant.verificationStatus = verificationStatus;
     }
 
     // Handle Property/Room/Bed reassignments
@@ -364,13 +375,15 @@ export const updateTenant = async (req: AuthenticatedRequest, res: Response, nex
       } else {
         tenant.agreementStatus = 'pending';
       }
+    }
 
+    await tenant.save();
+
+    if (allocationChanged) {
       // Update room occupancy states
       if (oldRoomId) await updateRoomOccupancy(oldRoomId.toString());
       if (tenant.assignedRoom) await updateRoomOccupancy(tenant.assignedRoom.toString());
     }
-
-    await tenant.save();
     return res.status(200).json({ message: 'Tenant updated successfully', tenant });
   } catch (error) {
     next(error);
@@ -458,6 +471,13 @@ export const checkoutTenant = async (req: AuthenticatedRequest, res: Response, n
         throw new AppError('Unauthorized checkout attempt', 403);
       }
       await checkUnpaidPersonsLimit(ownerId!);
+
+      // Soft delete the connection so it is removed from the owner's registry
+      connection.isDeleted = true;
+      await connection.save();
+    } else {
+      // For admin, soft-delete all active connections for this tenant
+      await TenantOwnerConnection.updateMany({ tenant: id, isDeleted: false }, { $set: { isDeleted: true } });
     }
 
     // Create a TenantReview linked to the Aadhaar number
@@ -477,11 +497,6 @@ export const checkoutTenant = async (req: AuthenticatedRequest, res: Response, n
       await Bed.findByIdAndUpdate(oldBedId, { $set: { isOccupied: false, tenant: null } });
     }
 
-    // Update room occupancy
-    if (oldRoomId) {
-      await updateRoomOccupancy(oldRoomId.toString());
-    }
-
     // Update tenant status
     tenant.assignedProperty = null;
     tenant.assignedRoom = null;
@@ -489,6 +504,11 @@ export const checkoutTenant = async (req: AuthenticatedRequest, res: Response, n
     tenant.agreementStatus = 'expired';
     
     await tenant.save();
+
+    // Update room occupancy
+    if (oldRoomId) {
+      await updateRoomOccupancy(oldRoomId.toString());
+    }
 
     try {
       await updateTenantStatsByAadhaar(tenant.aadhaarNumber);
@@ -558,6 +578,7 @@ export const createTenantInvite = async (req: AuthenticatedRequest, res: Respons
   try {
     const { 
       aadhaarNumber, 
+      panNumber,
       email, 
       sendMethod = 'email',
       whatsappNumber,
@@ -589,6 +610,7 @@ export const createTenantInvite = async (req: AuthenticatedRequest, res: Respons
     const invite = await TenantInvite.create({
       owner: ownerId,
       aadhaarNumber,
+      panNumber: panNumber || '',
       email: targetEmail,
       tokenHash,
       status: 'pending',
@@ -632,6 +654,7 @@ export const createTenantInvite = async (req: AuthenticatedRequest, res: Respons
       invite: {
         id: invite._id,
         aadhaarNumber: invite.aadhaarNumber,
+        panNumber: invite.panNumber,
         email: invite.email,
         expiresAt: invite.expiresAt,
         inviteUrl
@@ -665,6 +688,7 @@ export const getTenantInvite = async (req: Request, res: Response, next: NextFun
       invite: {
         token,
         aadhaarNumber: invite.aadhaarNumber,
+        panNumber: invite.panNumber,
         email: invite.email,
         owner: invite.owner,
         assignedProperty: invite.assignedProperty,
@@ -681,7 +705,7 @@ export const getTenantInvite = async (req: Request, res: Response, next: NextFun
 export const acceptTenantInvite = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { token } = req.params;
-    const { fullName, email, phone, emergencyContact, occupation, address } = req.body;
+    const { fullName, email, phone, emergencyContact, occupation, address, panNumber } = req.body;
     const tokenHash = hashInviteToken(token);
 
     const invite = await TenantInvite.findOne({ tokenHash })
@@ -704,7 +728,7 @@ export const acceptTenantInvite = async (req: Request, res: Response, next: Next
       requester: ownerId
     }).sort({ createdAt: -1 });
 
-    const verificationStatus = latestLog ? latestLog.status : 'verified';
+    const verificationStatus = latestLog ? latestLog.status : 'pending';
     const riskLevel = latestLog ? latestLog.riskLevel : 'low';
     const tenantRating = latestLog ? (latestLog.result.previousRating || 5.0) : 5.0;
     const creditScore = latestLog ? (latestLog.result.creditScore || 700) : 700;
@@ -714,6 +738,7 @@ export const acceptTenantInvite = async (req: Request, res: Response, next: Next
     if (!tenant) {
       tenant = new Tenant({
         aadhaarNumber: invite.aadhaarNumber,
+        panNumber: panNumber || invite.panNumber || '',
         owner: ownerId,
         agreementStatus: 'pending',
         verificationStatus
@@ -726,6 +751,11 @@ export const acceptTenantInvite = async (req: Request, res: Response, next: Next
     tenant.emergencyContact = emergencyContact;
     tenant.occupation = occupation;
     tenant.address = address;
+    if (panNumber !== undefined) {
+      tenant.panNumber = panNumber;
+    } else if (invite.panNumber) {
+      tenant.panNumber = invite.panNumber;
+    }
     tenant.joiningDate = null;
     tenant.assignedProperty = null;
     tenant.assignedRoom = null;

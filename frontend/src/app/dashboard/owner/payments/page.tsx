@@ -54,6 +54,9 @@ function PaymentsContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
+  const [expandedTenants, setExpandedTenants] = useState<Record<string, boolean>>({});
+  const [paymentSearchQuery, setPaymentSearchQuery] = useState('');
+  const [selectedInvoiceTenant, setSelectedInvoiceTenant] = useState<{ tenant: any; payments: Payment[] } | null>(null);
 
   // Invoice creation form states
   const [selectedTenantId, setSelectedTenantId] = useState('');
@@ -274,37 +277,45 @@ function PaymentsContent() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-stagger">
       {/* Header Panel */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">
-            {activeTab === 'payments' ? 'Rent Invoices' : 'Expense Registry'}
-          </h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            {activeTab === 'payments'
-              ? 'Generate monthly invoices, track dues, and record cash/UPI clearings.'
-              : 'Keep track of operations, maintenance outlays, and bills.'}
-          </p>
-        </div>
+      <div className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-600 text-white shadow-xl">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.15),transparent_50%)]" />
+        <div className="absolute -bottom-8 -right-8 w-32 h-32 rounded-full bg-white/5 blur-2xl" />
+        <div className="relative p-6 md:p-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/70">
+              {activeTab === 'payments' ? 'Revenue Management' : 'Operations Ledger'}
+            </span>
+            <h2 className="text-2xl font-black tracking-tight mt-1">
+              {activeTab === 'payments' ? 'Rent Invoices' : 'Expense Registry'}
+            </h2>
+            <p className="text-sm text-white/80 mt-1">
+              {activeTab === 'payments'
+                ? 'Generate monthly invoices, track dues, and record cash/UPI clearings.'
+                : 'Keep track of operations, maintenance outlays, and bills.'}
+            </p>
+          </div>
         <button
           onClick={() => activeTab === 'payments' ? setIsAddModalOpen(true) : setIsAddExpenseModalOpen(true)}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-sm font-bold shadow-md shadow-primary/20 transition-all hover:scale-105 shrink-0 w-full sm:w-auto justify-center"
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/15 hover:bg-white/25 text-white text-sm font-bold shadow-md backdrop-blur-sm transition-all hover:scale-105 shrink-0 w-full sm:w-auto justify-center border border-white/20"
         >
           <Plus className="w-4 h-4" />
           {activeTab === 'payments' ? 'Generate Invoice' : 'Add Expense'}
         </button>
       </div>
+    </div>
 
       {/* Tab Selector */}
-      <div className="flex border-b border-slate-200 dark:border-slate-800">
+      <div className="flex p-1.5 bg-slate-100 dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 w-full sm:w-auto">
         <button
           type="button"
           onClick={() => setActiveTab('payments')}
-          className={`flex items-center gap-2 px-6 py-3 border-b-2 text-sm font-bold transition-all ${activeTab === 'payments'
-              ? 'border-primary text-primary'
-              : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-            }`}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+            activeTab === 'payments'
+              ? 'bg-white dark:bg-slate-800 text-primary shadow-sm border border-slate-200 dark:border-slate-700'
+              : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+          }`}
         >
           <CreditCard className="w-4 h-4" />
           Rent Invoices
@@ -312,10 +323,11 @@ function PaymentsContent() {
         <button
           type="button"
           onClick={() => setActiveTab('expenses')}
-          className={`flex items-center gap-2 px-6 py-3 border-b-2 text-sm font-bold transition-all ${activeTab === 'expenses'
-              ? 'border-primary text-primary'
-              : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-            }`}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+            activeTab === 'expenses'
+              ? 'bg-white dark:bg-slate-800 text-primary shadow-sm border border-slate-200 dark:border-slate-700'
+              : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+          }`}
         >
           <Wallet className="w-4 h-4" />
           Portfolio Expenses
@@ -325,190 +337,232 @@ function PaymentsContent() {
       {/* Tab Content */}
       {activeTab === 'payments' ? (
         payments.length === 0 ? (
-          <div className="text-center py-20 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800">
-            <CreditCard className="w-12 h-12 mx-auto text-slate-400 mb-4" />
+          <div className="text-center py-20 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm card-hover">
+            <div className="w-16 h-16 mx-auto rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
+              <CreditCard className="w-8 h-8 text-primary" />
+            </div>
             <h3 className="text-lg font-bold text-slate-700 dark:text-slate-300">No Invoices Found</h3>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">Create a monthly invoice to begin tracking rent collection logs.</p>
             <button
               onClick={() => setIsAddModalOpen(true)}
-              className="mt-6 px-4 py-2.5 rounded-xl bg-primary text-white text-sm font-bold"
+              className="mt-6 px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-bold shadow-md shadow-primary/20 transition-all hover:scale-105"
             >
+              <Plus className="w-4 h-4 inline mr-1.5" />
               Create Invoice
             </button>
           </div>
-        ) : (
-          <>
-            {/* Desktop View */}
-            <div className="hidden md:block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-200 dark:border-slate-800 text-xs font-bold uppercase tracking-wider text-slate-400 bg-slate-50 dark:bg-slate-950/50">
-                      <th className="px-6 py-4">Tenant</th>
-                      <th className="px-6 py-4">Billing Unit</th>
-                      <th className="px-6 py-4">Amount</th>
-                      <th className="px-6 py-4">Due Date</th>
-                      <th className="px-6 py-4">Status</th>
-                      <th className="px-6 py-4 text-center">Record Payment</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
-                    {payments.map((payment) => (
-                      <tr key={payment._id} className="hover:bg-slate-50 dark:hover:bg-slate-955/30 transition-colors">
-                        <td className="px-6 py-4">
-                          <div className="font-bold text-slate-900 dark:text-white">{payment.tenant?.fullName || 'N/A'}</div>
-                          <div className="text-xs text-slate-400 mt-0.5">{payment.tenant?.phone || ''}</div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="font-semibold text-xs flex items-center gap-1">
-                            <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                            {payment.property?.propertyName}
-                          </div>
-                          <div className="text-xs text-slate-400 mt-1">Room: {payment.room?.roomNumber || 'N/A'}</div>
-                          {payment.notes && (
-                            <div className="text-[11px] text-slate-550 dark:text-slate-400 whitespace-pre-line mt-1 bg-slate-50 dark:bg-slate-950 p-2 rounded-lg border border-slate-100 dark:border-slate-800">
-                              {payment.notes}
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 font-bold text-slate-900 dark:text-white">
-                          ₹{payment.amount.toLocaleString()}
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-1 text-xs">
-                            <Calendar className="w-4 h-4 text-slate-400" />
-                            {new Date(payment.dueDate).toLocaleDateString()}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          {payment.status === 'paid' ? (
-                            <div>
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-bold bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/30">
-                                <Check className="w-3.5 h-3.5" />
-                                Paid
-                              </span>
-                              <div className="text-[10px] text-slate-400 mt-1 uppercase font-semibold">
-                                {payment.paymentMethod} - {payment.transactionId?.substring(0, 12)}
-                              </div>
-                            </div>
-                          ) : payment.status === 'overdue' ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-bold bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 border border-rose-200/50 dark:border-rose-800/30">
-                              <AlertCircle className="w-3.5 h-3.5" />
-                              Overdue
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-bold bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border border-amber-200/50 dark:border-amber-800/30">
-                              Unpaid
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          {payment.status !== 'paid' ? (
-                            <button
-                              onClick={() => {
-                                setPayTargetInvoiceId(payment._id);
-                                setIsPayModalOpen(true);
-                              }}
-                              className="px-3.5 py-1.5 bg-primary hover:bg-primary-hover text-white rounded-xl text-xs font-bold transition-all hover:scale-105"
-                            >
-                              Clear Bill
-                            </button>
-                          ) : (
-                            <span className="text-xs text-slate-400 font-semibold">Processed</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+        ) : selectedInvoiceTenant ? (
+          /* Invoice Detail Sub-View for Selected Tenant */
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setSelectedInvoiceTenant(null)}
+                className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 text-slate-500"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+              </button>
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Invoice Log</span>
+                <h3 className="text-lg font-extrabold text-slate-900 dark:text-white">{selectedInvoiceTenant.tenant.fullName || 'Unknown'}</h3>
               </div>
             </div>
 
-            {/* Mobile View */}
-            <div className="block md:hidden space-y-4">
-              {payments.map((payment) => (
-                <div
-                  key={payment._id}
-                  className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 space-y-3 shadow-sm"
-                >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <span className="font-bold text-slate-900 dark:text-white text-base block">{payment.tenant?.fullName || 'N/A'}</span>
-                      <span className="text-[11px] text-slate-450 block">{payment.tenant?.phone || ''}</span>
-                    </div>
-                    <div>
-                      {payment.status === 'paid' ? (
-                        <div className="flex flex-col items-end">
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-bold bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200/50">
-                            <Check className="w-3 h-3" />
-                            Paid
-                          </span>
-                          <span className="text-[9px] text-slate-400 mt-1 uppercase font-semibold">
-                            {payment.paymentMethod}
-                          </span>
+            {/* Desktop Table */}
+            <div className="hidden md:block bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-slate-800 text-[10px] font-bold uppercase tracking-wider text-slate-400 bg-slate-50/50 dark:bg-slate-950/30">
+                    <th className="px-6 py-3">Billing Period / Due Date</th>
+                    <th className="px-6 py-3">Amount</th>
+                    <th className="px-6 py-3">Status</th>
+                    <th className="px-6 py-3 text-center">Record Payment</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
+                  {selectedInvoiceTenant.payments.map((payment) => (
+                    <tr key={payment._id} className="hover:bg-slate-50 dark:hover:bg-slate-955/20 transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-1.5 text-xs text-slate-800 dark:text-slate-200">
+                          <Calendar className="w-4 h-4 text-slate-400" />
+                          <span>{new Date(payment.dueDate).toLocaleDateString()}</span>
                         </div>
-                      ) : payment.status === 'overdue' ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-bold bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 border border-rose-200/50">
-                          <AlertCircle className="w-3.5 h-3.5" />
-                          Overdue
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-bold bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border border-amber-200/50">
-                          Unpaid
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                        {payment.notes && (
+                          <div className="text-[10px] text-slate-400 mt-1 max-w-md italic">Note: {payment.notes}</div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 font-bold text-slate-900 dark:text-white">₹{payment.amount.toLocaleString('en-IN')}</td>
+                      <td className="px-6 py-4">
+                        {payment.status === 'paid' ? (
+                          <div>
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/30">
+                              <Check className="w-3 h-3" /> Paid
+                            </span>
+                            <div className="text-[9px] text-slate-400 mt-0.5 uppercase font-semibold">{payment.paymentMethod} - {payment.transactionId?.substring(0, 12)}</div>
+                          </div>
+                        ) : payment.status === 'overdue' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 border border-rose-200/50 dark:border-rose-800/30">
+                            <AlertCircle className="w-3.5 h-3.5" /> Overdue
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border border-amber-200/50 dark:border-amber-800/30">Unpaid</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        {payment.status !== 'paid' ? (
+                          <button onClick={() => { setPayTargetInvoiceId(payment._id); setIsPayModalOpen(true); }}
+                            className="px-3.5 py-1.5 bg-primary hover:bg-primary-hover text-white rounded-xl text-xs font-bold transition-all hover:scale-105">Clear Bill</button>
+                        ) : (
+                          <span className="text-xs text-slate-400 font-semibold">Processed</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
-                  <div className="text-xs space-y-1.5 py-2.5 border-t border-b border-slate-50 dark:border-slate-850">
-                    <div className="flex justify-between">
-                      <span className="text-slate-550">Property:</span>
-                      <span className="text-slate-800 dark:text-slate-300 font-medium flex items-center gap-1">
-                        <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                        {payment.property?.propertyName}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-550">Room:</span>
-                      <span className="text-slate-800 dark:text-slate-300 font-medium">Room {payment.room?.roomNumber || 'N/A'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-550">Due Date:</span>
-                      <span className="text-slate-800 dark:text-slate-300 font-medium flex items-center gap-1">
-                        <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                        {new Date(payment.dueDate).toLocaleDateString()}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-550">Amount:</span>
-                      <span className="font-bold text-slate-900 dark:text-white">₹{payment.amount.toLocaleString('en-IN')}</span>
-                    </div>
-                    {payment.notes && (
-                      <div className="text-[11px] text-slate-550 dark:text-slate-400 whitespace-pre-line mt-1 bg-slate-50 dark:bg-slate-950 p-2 rounded-lg border border-slate-100 dark:border-slate-800">
-                        {payment.notes}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex justify-end pt-1">
-                    {payment.status !== 'paid' ? (
-                      <button
-                        onClick={() => {
-                          setPayTargetInvoiceId(payment._id);
-                          setIsPayModalOpen(true);
-                        }}
-                        className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-xl text-xs font-bold shadow-sm shadow-primary/10 transition-all"
-                      >
-                        Clear Bill
-                      </button>
+            {/* Mobile Cards */}
+            <div className="block md:hidden space-y-3">
+              {selectedInvoiceTenant.payments.map((payment) => (
+                <div key={payment._id} className="bg-white dark:bg-slate-900 border border-slate-150 dark:border-slate-800 rounded-xl p-3.5 space-y-2.5 shadow-sm">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-mono text-slate-400">Due: {new Date(payment.dueDate).toLocaleDateString()}</span>
+                    {payment.status === 'paid' ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 border border-emerald-200/50"><Check className="w-3 h-3" /> Paid</span>
+                    ) : payment.status === 'overdue' ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 dark:bg-rose-950/30 text-rose-600 border border-rose-200/50"><AlertCircle className="w-3 h-3" /> Overdue</span>
                     ) : (
-                      <span className="text-xs text-slate-400 font-semibold">Processed</span>
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 dark:bg-amber-950/30 text-amber-600 border border-amber-200/50">Unpaid</span>
                     )}
                   </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-slate-500">Amount Due:</span>
+                    <span className="font-bold text-slate-900 dark:text-white">₹{payment.amount.toLocaleString('en-IN')}</span>
+                  </div>
+                  {payment.status === 'paid' && (
+                    <div className="text-[10px] text-slate-400 text-right uppercase font-semibold">Method: {payment.paymentMethod} • Txn: {payment.transactionId?.substring(0, 10)}</div>
+                  )}
+                  {payment.notes && (
+                    <div className="text-[10px] text-slate-400 bg-slate-50 dark:bg-slate-950 p-2 rounded-lg border border-slate-100 dark:border-slate-800">Note: {payment.notes}</div>
+                  )}
+                  {payment.status !== 'paid' && (
+                    <div className="flex justify-end pt-1">
+                      <button onClick={() => { setPayTargetInvoiceId(payment._id); setIsPayModalOpen(true); }}
+                        className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-xl text-xs font-bold shadow-sm shadow-primary/10 transition-all w-full sm:w-auto text-center">Clear Bill</button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
-          </>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {/* Search Bar */}
+            <div className="relative max-w-md">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="absolute left-3.5 top-2.5 text-slate-400"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <input
+                type="text"
+                placeholder="Search by tenant, phone, property or room..."
+                value={paymentSearchQuery}
+                onChange={(e) => setPaymentSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+            </div>
+
+            {/* Tenant Cards List */}
+            {(() => {
+              const grouped: Record<string, { tenant: any; payments: Payment[] }> = {};
+              payments.forEach((payment) => {
+                const tenantId = payment.tenant?._id || 'unknown';
+                if (!grouped[tenantId]) {
+                  grouped[tenantId] = {
+                    tenant: payment.tenant || { fullName: 'Unknown Tenant', phone: '' },
+                    payments: []
+                  };
+                }
+                grouped[tenantId].payments.push(payment);
+              });
+
+              const groupedArray = Object.values(grouped).sort((a, b) =>
+                (a.tenant?.fullName || '').localeCompare(b.tenant?.fullName || '')
+              );
+
+              const filteredGroups = groupedArray.filter(({ tenant, payments: tenantPayments }) => {
+                const q = paymentSearchQuery.toLowerCase();
+                if (!q) return true;
+                const firstPayment = tenantPayments[0];
+                return (
+                  (tenant.fullName || '').toLowerCase().includes(q) ||
+                  (tenant.phone || '').includes(q) ||
+                  (firstPayment?.property?.propertyName || '').toLowerCase().includes(q) ||
+                  (firstPayment?.room?.roomNumber || '').toLowerCase().includes(q)
+                );
+              });
+
+              if (filteredGroups.length === 0) {
+                return (
+                  <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
+                    <User className="w-8 h-8 mx-auto text-slate-400 mb-2" />
+                    <p className="text-sm text-slate-500">No tenants match your search.</p>
+                  </div>
+                );
+              }
+
+              return filteredGroups.map(({ tenant, payments: tenantPayments }) => {
+                const unpaidPayments = tenantPayments.filter((p) => p.status !== 'paid');
+                const outstandingDues = unpaidPayments.reduce((sum, p) => sum + p.amount, 0);
+                const firstPayment = tenantPayments[0];
+                const propertyName = firstPayment?.property?.propertyName || 'N/A';
+                const roomNumber = firstPayment?.room?.roomNumber || 'N/A';
+
+                return (
+                  <div
+                    key={tenant._id || 'unknown'}
+                    onClick={() => setSelectedInvoiceTenant({ tenant, payments: tenantPayments })}
+                    className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm cursor-pointer hover:border-primary/50 hover:shadow-md transition-all duration-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold">
+                        {tenant.fullName ? tenant.fullName.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase() : 'U'}
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                          {tenant.fullName || 'Unknown Tenant'}
+                          {tenant.phone && <span className="text-xs text-slate-405 font-normal">({tenant.phone})</span>}
+                        </h4>
+                        <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mt-0.5">
+                          <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                          {propertyName} • Room {roomNumber}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-5 w-full sm:w-auto justify-between sm:justify-end">
+                      <div className="text-right">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Invoices</span>
+                        <span className="text-xs font-semibold mt-0.5 block text-slate-700 dark:text-slate-300">
+                          {tenantPayments.length} {tenantPayments.length === 1 ? 'Invoice' : 'Invoices'}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Outstanding</span>
+                        {outstandingDues > 0 ? (
+                          <span className="text-xs font-bold text-rose-500 block mt-0.5">₹{outstandingDues.toLocaleString('en-IN')}</span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-500 mt-0.5">
+                            <Check className="w-3.5 h-3.5" /> No dues
+                          </span>
+                        )}
+                      </div>
+                      <div className="p-1 text-slate-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                      </div>
+                    </div>
+                  </div>
+                );
+              });
+            })()}
+          </div>
         )
       ) : (
         /* Operating Expenses Tab Content */

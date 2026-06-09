@@ -168,28 +168,32 @@ export default function OwnerDashboardPage() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 animate-stagger">
       {/* Welcome Banner */}
-      <div className="p-6 rounded-2xl bg-gradient-to-r from-primary via-indigo-650 to-accent text-white shadow-xl relative overflow-hidden flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div className="absolute inset-0 bg-black/10 mix-blend-overlay" />
-        <div className="absolute -right-16 -top-16 w-48 h-48 rounded-full bg-white/10 blur-xl" />
-        <div className="relative z-10">
-          <h2 className="text-2xl font-extrabold tracking-tight">Executive Portfolio Hub</h2>
-          <p className="text-white/80 text-sm mt-1">Review operational occupancy rates, rent invoices, and tenant risk levels.</p>
-        </div>
-        <div className="flex gap-3 shrink-0 relative z-10 w-full sm:w-auto">
-          <button
-            onClick={handleDownloadApp}
-            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-white/20 hover:bg-white/30 text-white font-bold text-sm border border-white/30 shadow-md transition-all hover:scale-105 cursor-pointer"
-          >
-            <Download className="w-4 h-4" /> Download App
-          </button>
-          <a
-            href="/dashboard/owner/payments?tab=expenses"
-            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-white hover:bg-slate-100 text-primary font-bold text-sm shadow-md transition-all hover:scale-105 shrink-0"
-          >
-            <Plus className="w-4 h-4" /> Add Expense
-          </a>
+      <div className="p-8 rounded-2xl bg-gradient-to-br from-indigo-600 via-primary to-blue-500 text-white shadow-xl relative overflow-hidden group">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.15),transparent_50%)]" />
+        <div className="absolute -right-20 -top-20 w-56 h-56 rounded-full bg-white/5 blur-3xl group-hover:scale-110 transition-transform duration-700" />
+        <div className="absolute -left-10 -bottom-10 w-40 h-40 rounded-full bg-white/5 blur-2xl" />
+        <div className="relative z-10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <span className="text-[11px] font-bold uppercase tracking-[0.22em] text-white/70">Executive Dashboard</span>
+            <h2 className="text-2xl font-black tracking-tight mt-1">Executive Portfolio Hub</h2>
+            <p className="text-white/80 text-sm mt-1">Review operational occupancy rates, rent invoices, and tenant risk levels.</p>
+          </div>
+          <div className="flex gap-3 shrink-0 w-full sm:w-auto">
+            <button
+              onClick={handleDownloadApp}
+              className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-white/15 hover:bg-white/25 text-white font-bold text-sm border border-white/20 shadow-md transition-all hover:scale-105 cursor-pointer backdrop-blur-sm"
+            >
+              <Download className="w-4 h-4" /> Download App
+            </button>
+            <a
+              href="/dashboard/owner/payments?tab=expenses"
+              className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-white hover:bg-slate-100 text-primary font-bold text-sm shadow-md transition-all hover:scale-105 shrink-0"
+            >
+              <Plus className="w-4 h-4" /> Add Expense
+            </a>
+          </div>
         </div>
       </div>
 
@@ -255,92 +259,111 @@ export default function OwnerDashboardPage() {
       )}
 
       {/* Grid Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-5">
         {/* Properties Card */}
-        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex justify-between items-start">
-            <span className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Properties</span>
-            <div className="p-2 rounded-lg bg-primary/10 text-primary">
-              <Home className="w-5 h-5" />
+        <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm card-hover">
+          <div className="flex justify-between items-start mb-3">
+            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest">Properties</span>
+            <div className="p-2.5 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 text-primary shadow-sm">
+              <Home className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-4">
-            <h3 className="text-3xl font-extrabold text-slate-900 dark:text-white">{stats.totalProperties}</h3>
-            <span className="text-xs text-slate-400 font-semibold block mt-1">{stats.totalRooms} Rooms registered</span>
+          <div>
+            <h3 className="text-3xl font-black text-slate-900 dark:text-white animate-count-up">{stats.totalProperties}</h3>
+            <div className="flex items-center gap-1.5 mt-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary/60" />
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">{stats.totalRooms} Rooms registered</span>
+            </div>
           </div>
         </div>
 
         {/* Beds Capacity */}
-        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex justify-between items-start">
-            <span className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Beds Capacity</span>
-            <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400">
-              <Users className="w-5 h-5" />
+        <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm card-hover">
+          <div className="flex justify-between items-start mb-3">
+            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest">Beds Capacity</span>
+            <div className="p-2.5 rounded-xl bg-gradient-to-br from-emerald-500/20 to-emerald-500/5 text-emerald-600 dark:text-emerald-400 shadow-sm">
+              <Users className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-4">
-            <h3 className="text-3xl font-extrabold text-slate-900 dark:text-white">{stats.totalBeds}</h3>
-            <span className="text-xs text-slate-400 font-semibold block mt-1">
-              {stats.occupiedBeds} occupied, {stats.vacantBeds} vacant
-            </span>
+          <div>
+            <h3 className="text-3xl font-black text-slate-900 dark:text-white animate-count-up">{stats.totalBeds}</h3>
+            <div className="flex items-center gap-3 mt-1">
+              <span className="text-[11px] text-emerald-600 font-medium flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 status-dot-active" />
+                {stats.occupiedBeds} occupied
+              </span>
+              <span className="text-[11px] text-slate-400 font-medium">{stats.vacantBeds} vacant</span>
+            </div>
           </div>
         </div>
 
         {/* Occupancy Rate */}
-        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex justify-between items-start">
-            <span className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Occupancy Rate</span>
-            <div className="p-2 rounded-lg bg-accent/10 text-accent">
-              <Percent className="w-5 h-5" />
+        <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm card-hover">
+          <div className="flex justify-between items-start mb-3">
+            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest">Occupancy Rate</span>
+            <div className="p-2.5 rounded-xl bg-gradient-to-br from-cyan-500/20 to-cyan-500/5 text-cyan-600 dark:text-cyan-400 shadow-sm">
+              <Percent className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-4">
-            <h3 className="text-3xl font-extrabold text-slate-900 dark:text-white">{stats.occupancyRate}%</h3>
-            <span className="text-xs text-slate-400 font-semibold block mt-1">Active: {stats.activeTenants} tenants</span>
+          <div>
+            <div className="flex items-end gap-2">
+              <h3 className="text-3xl font-black text-slate-900 dark:text-white animate-count-up">{stats.occupancyRate}%</h3>
+              <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden mb-1">
+                <div 
+                  className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-primary transition-all duration-1000"
+                  style={{ width: `${Math.min(stats.occupancyRate, 100)}%` }}
+                />
+              </div>
+            </div>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1 block">Active: {stats.activeTenants} tenants</span>
           </div>
         </div>
 
-        {/* Monthly Revenue (Current Month) */}
-        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex justify-between items-start">
-            <span className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Month Revenue</span>
-            <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400">
-              <CreditCard className="w-5 h-5" />
+        {/* Monthly Revenue */}
+        <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm card-hover">
+          <div className="flex justify-between items-start mb-3">
+            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest">Month Revenue</span>
+            <div className="p-2.5 rounded-xl bg-gradient-to-br from-amber-500/20 to-amber-500/5 text-amber-600 dark:text-amber-400 shadow-sm">
+              <CreditCard className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-4">
-            <h3 className="text-3xl font-extrabold text-slate-900 dark:text-white">₹{stats.monthlyRevenue.toLocaleString('en-IN')}</h3>
-            <span className="text-xs text-slate-400 font-semibold block mt-1">Lifetime: ₹{(stats.totalRevenue || stats.monthlyRevenue).toLocaleString('en-IN')}</span>
+          <div>
+            <h3 className="text-3xl font-black text-slate-900 dark:text-white animate-count-up">₹{stats.monthlyRevenue.toLocaleString('en-IN')}</h3>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1 block">Lifetime: ₹{(stats.totalRevenue || stats.monthlyRevenue).toLocaleString('en-IN')}</span>
           </div>
         </div>
 
-        {/* Expenses (Current Month) */}
-        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex justify-between items-start">
-            <span className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Total Expenses</span>
-            <div className="p-2 rounded-lg bg-rose-50 dark:bg-rose-950 text-rose-600 dark:text-rose-455">
-              <Wallet className="w-5 h-5" />
+        {/* Total Expenses */}
+        <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm card-hover">
+          <div className="flex justify-between items-start mb-3">
+            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest">Total Expenses</span>
+            <div className="p-2.5 rounded-xl bg-gradient-to-br from-rose-500/20 to-rose-500/5 text-rose-600 dark:text-rose-400 shadow-sm">
+              <Wallet className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-4">
-            <h3 className="text-3xl font-extrabold text-slate-900 dark:text-white">₹{stats.totalExpenses.toLocaleString('en-IN')}</h3>
-            <span className="text-xs text-slate-400 font-semibold block mt-1">Month: ₹{(stats.monthlyExpenses || 0).toLocaleString('en-IN')}</span>
+          <div>
+            <h3 className="text-3xl font-black text-slate-900 dark:text-white animate-count-up">₹{stats.totalExpenses.toLocaleString('en-IN')}</h3>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1 block">Month: ₹{(stats.monthlyExpenses || 0).toLocaleString('en-IN')}</span>
           </div>
         </div>
 
         {/* Net Profit */}
-        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex justify-between items-start">
-            <span className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Net Profit</span>
-            <div className="p-2 rounded-lg bg-emerald-50 border border-emerald-100 dark:bg-emerald-950/40 dark:border-emerald-900/50 text-emerald-600 dark:text-emerald-400">
-              <TrendingUp className="w-5 h-5" />
+        <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm card-hover">
+          <div className="flex justify-between items-start mb-3">
+            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest">Net Profit</span>
+            <div className={`p-2.5 rounded-xl bg-gradient-to-br shadow-sm ${
+              stats.netProfit >= 0 
+                ? 'from-emerald-500/20 to-emerald-500/5 text-emerald-600 dark:text-emerald-400' 
+                : 'from-rose-500/20 to-rose-500/5 text-rose-600 dark:text-rose-400'
+            }`}>
+              <TrendingUp className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-4">
-            <h3 className={`text-3xl font-extrabold ${stats.netProfit >= 0 ? 'text-emerald-600' : 'text-rose-650'}`}>
-              ₹{stats.netProfit.toLocaleString('en-IN')}
+          <div>
+            <h3 className={`text-3xl font-black animate-count-up ${stats.netProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+              {stats.netProfit >= 0 ? '+' : ''}₹{stats.netProfit.toLocaleString('en-IN')}
             </h3>
-            <span className="text-xs text-slate-400 font-semibold block mt-1">Revenue - Expenses</span>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1 block">Revenue - Expenses</span>
           </div>
         </div>
       </div>
@@ -348,21 +371,24 @@ export default function OwnerDashboardPage() {
       {/* Main Charts & Analytics Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Double-series Chart */}
-        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm lg:col-span-2 flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-6">
+        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm lg:col-span-2 flex flex-col justify-between card-hover">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6">
             <div>
               <h4 className="text-base font-bold text-slate-900 dark:text-white">Portfolio Financial Overview</h4>
               <span className="text-xs text-slate-400">Comparison of Revenue vs Expenses over the past 6 months</span>
             </div>
-            <div className="flex gap-2">
-              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600">
-                <span className="w-2.5 h-2.5 rounded-full bg-blue-500" /> Revenue
+            <div className="flex gap-3 p-2 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-100 dark:border-slate-800">
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold">
+                <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
+                <span className="text-blue-600">Revenue</span>
               </span>
-              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-500">
-                <span className="w-2.5 h-2.5 rounded-full bg-rose-500" /> Expenses
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold">
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
+                <span className="text-rose-500">Expenses</span>
               </span>
-              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-500">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> Net Profit
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                <span className="text-emerald-500">Net Profit</span>
               </span>
             </div>
           </div>
@@ -403,7 +429,7 @@ export default function OwnerDashboardPage() {
         </div>
 
         {/* Expense Category Breakdown */}
-        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm flex flex-col justify-between">
+        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm flex flex-col justify-between card-hover">
           <div>
             <div className="flex items-center justify-between mb-4">
               <h4 className="text-base font-bold text-slate-900 dark:text-white">Expense Breakdown</h4>
@@ -454,7 +480,7 @@ export default function OwnerDashboardPage() {
       </div>
 
       {/* Quick Actions Panel */}
-      <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm">
+      <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm card-hover">
         <h4 className="text-base font-bold text-slate-900 dark:text-white mb-4">Quick Operations</h4>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <a
@@ -514,7 +540,7 @@ export default function OwnerDashboardPage() {
       {/* Attention & Recent Activities Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Recent Activity Feed */}
-        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm lg:col-span-2 flex flex-col justify-between">
+        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm lg:col-span-2 flex flex-col justify-between card-hover">
           <div>
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-4">
               <div className="flex gap-4">
@@ -654,7 +680,7 @@ export default function OwnerDashboardPage() {
         </div>
 
         {/* Live Attention Panel */}
-        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm flex flex-col justify-between">
+        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm flex flex-col justify-between card-hover">
           <div>
             <div className="flex items-center justify-between mb-6">
               <h4 className="text-base font-bold text-slate-900 dark:text-white">Attention Feed</h4>

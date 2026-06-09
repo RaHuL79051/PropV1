@@ -63,12 +63,20 @@ export default function TenantsPage() {
 
   const [fullName, setFullName] = useState('');
   const [aadhaarNumber, setAadhaarNumber] = useState('');
+  const [panNumber, setPanNumber] = useState('');
   const [tenantEmail, setTenantEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [emergencyContact, setEmergencyContact] = useState('');
   const [occupation, setOccupation] = useState('');
   const [address, setAddress] = useState('');
   const [joiningDate, setJoiningDate] = useState(getTodayDateString());
+
+  // Search/Verify Wizard states
+  const [searchAadhaar, setSearchAadhaar] = useState('');
+  const [searchPan, setSearchPan] = useState('');
+  const [searchPhone, setSearchPhone] = useState('');
+  const [searchName, setSearchName] = useState('');
+  const [searchOperator, setSearchOperator] = useState<'or' | 'and'>('or');
 
   // Allocation states
   const [submitting, setSubmitting] = useState(false);
@@ -86,14 +94,45 @@ export default function TenantsPage() {
   };
 
   const handleVerifyAadhaar = async () => {
-    if (!aadhaarNumber || aadhaarNumber.length !== 12 || !/^\d+$/.test(aadhaarNumber)) {
+    const cleanAadhaar = searchAadhaar.trim();
+    const cleanPan = searchPan.trim().toUpperCase();
+    const cleanPhone = searchPhone.trim();
+    const cleanName = searchName.trim();
+
+    if (!cleanAadhaar && !cleanPan && !cleanPhone && !cleanName) {
+      showToast('Please enter at least one search query field', 'error');
+      return;
+    }
+
+    if (cleanAadhaar && (cleanAadhaar.length !== 12 || isNaN(Number(cleanAadhaar)))) {
       showToast('Aadhaar number must be exactly 12 digits', 'error');
+      return;
+    }
+
+    if (cleanPan && cleanPan.length !== 10) {
+      showToast('PAN card number must be exactly 10 characters', 'error');
+      return;
+    }
+
+    if (cleanPhone && (cleanPhone.length !== 10 || isNaN(Number(cleanPhone)))) {
+      showToast('Phone number must be exactly 10 digits', 'error');
+      return;
+    }
+
+    if (cleanName && cleanName.length < 2) {
+      showToast('Name must be at least 2 characters', 'error');
       return;
     }
 
     setAadhaarVerifying(true);
     try {
-      const res = await api.post('/verification/verify', { aadhaarNumber });
+      const res = await api.post('/verification/verify', {
+        aadhaarNumber: cleanAadhaar,
+        panNumber: cleanPan,
+        phone: cleanPhone,
+        fullName: cleanName,
+        operator: searchOperator
+      });
 
       if (res.data.connectionStatus === 'active') {
         showToast('Tenant is already active in your registry', 'error');
@@ -102,16 +141,16 @@ export default function TenantsPage() {
       }
 
       if (res.data.connectionStatus === 'inactive') {
-        setReactivateAadhaar(aadhaarNumber);
+        setReactivateAadhaar(res.data.prefill.aadhaarNumber || cleanAadhaar);
         setIsReactivateModalOpen(true);
         setVerificationResult(null);
         return;
       }
 
       setVerificationResult(res.data);
-      showToast('Aadhaar verification report retrieved successfully', 'success');
+      showToast('Tenant verification report retrieved successfully', 'success');
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to retrieve Aadhaar verification report', 'error');
+      showToast(err.response?.data?.message || 'Failed to retrieve verification report', 'error');
     } finally {
       setAadhaarVerifying(false);
     }
@@ -141,8 +180,10 @@ export default function TenantsPage() {
     if (!verificationResult) return;
     const { prefill } = verificationResult;
     setFullName(prefill.fullName || '');
+    setAadhaarNumber(prefill.aadhaarNumber || searchAadhaar || '');
+    setPanNumber(prefill.panNumber || searchPan || '');
     setTenantEmail(prefill.email || '');
-    setPhone(prefill.phone || '');
+    setPhone(prefill.phone || searchPhone || '');
     setEmergencyContact(prefill.emergencyContact || '');
     setOccupation(prefill.occupation || '');
     setAddress(prefill.address || '');
@@ -157,8 +198,8 @@ export default function TenantsPage() {
   };
 
   const handleSendInvitation = async () => {
-    if (!aadhaarNumber || aadhaarNumber.length !== 12 || !/^\d+$/.test(aadhaarNumber)) {
-      showToast('Aadhaar number must be exactly 12 digits', 'error');
+    if (!aadhaarNumber) {
+      showToast('Aadhaar number is required to send invite', 'error');
       return;
     }
 
@@ -180,6 +221,7 @@ export default function TenantsPage() {
     try {
       const res = await api.post('/tenants/invites', {
         aadhaarNumber,
+        panNumber,
         email: inviteMethod === 'email' ? resolvedEmail : '',
         sendMethod: inviteMethod,
         whatsappNumber: inviteMethod === 'whatsapp' ? inviteWhatsapp : '',
@@ -424,6 +466,7 @@ export default function TenantsPage() {
       await api.post('/tenants', {
         fullName,
         aadhaarNumber,
+        panNumber,
         phone,
         emergencyContact,
         occupation,
@@ -599,11 +642,18 @@ export default function TenantsPage() {
   const resetForm = () => {
     setFullName('');
     setAadhaarNumber('');
+    setPanNumber('');
     setTenantEmail('');
     setPhone('');
     setEmergencyContact('');
     setOccupation('');
     setAddress('');
+
+    setSearchAadhaar('');
+    setSearchPan('');
+    setSearchPhone('');
+    setSearchName('');
+    setSearchOperator('or');
 
     setWizardStep(1);
     setVerificationResult(null);
@@ -760,7 +810,7 @@ export default function TenantsPage() {
                         <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Contact</th>
                         <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Aadhaar</th>
                         <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Assigned Space</th>
-                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 w-28">Scores</th>
+                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 w-28">Risk Level</th>
                         <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Payment</th>
                         <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 w-32 text-center">Actions</th>
                       </tr>
@@ -846,25 +896,16 @@ export default function TenantsPage() {
                               )}
                             </td>
 
-                            {/* Scores */}
+                            {/* Risk Level */}
                             <td className="px-4 py-3.5">
-                              <div className="flex flex-col gap-1">
-                                <div className="flex items-center justify-between gap-2">
-                                  <span className="text-[10px] font-semibold uppercase text-slate-400">Credit</span>
-                                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200 tabular-nums">{tenant.creditScore || 700}</span>
-                                </div>
-                                <div className="flex items-center justify-between gap-2">
-                                  <span className="text-[10px] font-semibold uppercase text-slate-400">Risk</span>
-                                  <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${tenant.riskLevel === 'low'
-                                    ? 'text-teal-700 bg-teal-50 dark:text-teal-400 dark:bg-teal-950/30'
-                                    : tenant.riskLevel === 'medium'
-                                      ? 'text-amber-700 bg-amber-50 dark:text-amber-400 dark:bg-amber-950/30'
-                                      : 'text-rose-700 bg-rose-50 dark:text-rose-400 dark:bg-rose-950/30'
-                                    }`}>
-                                    {tenant.riskLevel === 'low' ? 'LOW' : tenant.riskLevel === 'medium' ? 'MED' : 'HIGH'}
-                                  </span>
-                                </div>
-                              </div>
+                              <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-md border ${tenant.riskLevel === 'low'
+                                ? 'text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-950/30 dark:border-emerald-900'
+                                : tenant.riskLevel === 'medium'
+                                  ? 'text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-950/30 dark:border-amber-900'
+                                  : 'text-rose-700 bg-rose-50 border-rose-200 dark:text-rose-400 dark:bg-rose-950/30 dark:border-rose-900'
+                                }`}>
+                                {tenant.riskLevel || 'LOW'}
+                              </span>
                             </td>
 
                             {/* Payment Status */}
@@ -1006,18 +1047,15 @@ export default function TenantsPage() {
                           </span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-slate-500">Credit Score:</span>
-                          <div className="flex gap-1.5 items-center">
-                            <span className="font-bold text-slate-850 dark:text-slate-200">{tenant.creditScore || 700}</span>
-                            <span className={`text-[9px] font-bold uppercase px-1.5 py-0.2 rounded border ${tenant.riskLevel === 'low'
-                              ? 'text-teal-700 border-teal-500/20 bg-teal-50 dark:text-teal-400 dark:bg-teal-950/30'
-                              : tenant.riskLevel === 'medium'
-                                ? 'text-amber-700 border-amber-500/20 bg-amber-50 dark:text-amber-400 dark:bg-amber-950/30'
-                                : 'text-rose-700 border-rose-500/20 bg-rose-50 dark:text-rose-400 dark:bg-rose-950/30'
-                              }`}>
-                              {tenant.riskLevel === 'low' ? 'Low' : tenant.riskLevel === 'medium' ? 'Med' : 'High'}
-                            </span>
-                          </div>
+                          <span className="text-slate-500">Risk Level:</span>
+                          <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded border ${tenant.riskLevel === 'low'
+                            ? 'text-teal-700 border-teal-500/20 bg-teal-50 dark:text-teal-400 dark:bg-teal-950/30'
+                            : tenant.riskLevel === 'medium'
+                              ? 'text-amber-700 border-amber-500/20 bg-amber-50 dark:text-amber-400 dark:bg-amber-950/30'
+                              : 'text-rose-700 border-rose-500/20 bg-rose-50 dark:text-rose-400 dark:bg-rose-950/30'
+                            }`}>
+                            {tenant.riskLevel || 'Low'} Risk
+                          </span>
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-slate-500">Rating:</span>
@@ -1101,48 +1139,82 @@ export default function TenantsPage() {
                 <div className="pr-10">
                   <h3 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
                     <ShieldCheck className="w-6 h-6 text-primary animate-pulse-subtle" />
-                    Aadhaar Verification (Step 1 of 2)
+                    Tenant Background Search (Step 1 of 2)
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    Enter the occupant's Aadhaar number to verify their background, reliability index, and previous rental reviews.
+                    Enter occupant details to verify their rental history, reliability score, and landlord feedback.
                   </p>
                 </div>
 
-                <div className="space-y-3">
-                  <label className="block text-xs font-bold uppercase text-slate-550 dark:text-slate-400">
-                    Aadhaar Card Number (12 Digits)
-                  </label>
-                  <div className="flex gap-2 flex-col">
-                    <div className="relative flex-1">
-                      <input
-                        type="text"
-                        value={aadhaarNumber}
-                        onChange={(e) => setAadhaarNumber(e.target.value.replace(/\D/g, '').slice(0, 12))}
-                        className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-                        placeholder="Enter 12-digit number (e.g. 123456789012)"
-                        maxLength={12}
-                      />
-                      <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
-                    </div>
-                    <button
-                      type="button"
-                      disabled={aadhaarVerifying || aadhaarNumber.length !== 12}
-                      onClick={handleVerifyAadhaar}
-                      className="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-bold shadow-md shadow-primary/20 transition-all hover:scale-[1.02] disabled:opacity-50 disabled:scale-100 flex items-center gap-1.5 shrink-0"
-                      style={{ margin: "0 auto", width: "100%", display: "flex", justifyContent: "center" }}
-                    >
-                      {aadhaarVerifying ? (
-                        <>
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          Checking...
-                        </>
-                      ) : (
-                        'Check Profile'
-                      )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold mb-1 uppercase tracking-wider text-slate-400">Aadhaar Card Number</label>
+                    <input
+                      type="text"
+                      maxLength={12}
+                      value={searchAadhaar}
+                      onChange={(e) => setSearchAadhaar(e.target.value.replace(/\D/g, ''))}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-xs text-slate-900 dark:text-white outline-none focus:ring-1 focus:ring-primary"
+                      placeholder="e.g. 123456789012"
+                    />
+                  </div>
 
-                    </button>
+                  <div>
+                    <label className="block text-xs font-bold mb-1 uppercase tracking-wider text-slate-400">PAN Card Number</label>
+                    <input
+                      type="text"
+                      maxLength={10}
+                      value={searchPan}
+                      onChange={(e) => setSearchPan(e.target.value.toUpperCase())}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-xs text-slate-900 dark:text-white outline-none focus:ring-1 focus:ring-primary"
+                      placeholder="e.g. ABCDE1234F"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold mb-1 uppercase tracking-wider text-slate-400">Phone Number</label>
+                    <input
+                      type="text"
+                      maxLength={10}
+                      value={searchPhone}
+                      onChange={(e) => setSearchPhone(e.target.value.replace(/\D/g, ''))}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-xs text-slate-900 dark:text-white outline-none focus:ring-1 focus:ring-primary"
+                      placeholder="e.g. 9876500001"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold mb-1 uppercase tracking-wider text-slate-400">Tenant Name</label>
+                    <input
+                      type="text"
+                      value={searchName}
+                      onChange={(e) => setSearchName(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-xs text-slate-900 dark:text-white outline-none focus:ring-1 focus:ring-primary"
+                      placeholder="e.g. Arjun Kumar"
+                    />
                   </div>
                 </div>
+
+
+
+                <button
+                  type="button"
+                  disabled={aadhaarVerifying || (!searchAadhaar && !searchPan && !searchPhone && !searchName)}
+                  onClick={handleVerifyAadhaar}
+                  className="w-full py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-bold shadow-md shadow-primary/20 transition-all hover:scale-[1.02] disabled:opacity-50 disabled:scale-100 flex items-center justify-center gap-1.5"
+                >
+                  {aadhaarVerifying ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Checking...
+                    </>
+                  ) : (
+                    <>
+                      <Search className="w-3.5 h-3.5" />
+                      Search & Check Profile
+                    </>
+                  )}
+                </button>
 
                 {verificationResult && (
                   <div className="space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -1159,6 +1231,30 @@ export default function TenantsPage() {
                         </div>
                       )}
 
+                      {verificationResult.isNewTenant ? (
+                        /* First-Time Renter — Friendly Welcome Banner */
+                        <div className="p-6 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/30 dark:to-teal-950/30 border border-emerald-200 dark:border-emerald-900/50 text-center space-y-3">
+                          <div className="w-14 h-14 mx-auto rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center">
+                            <User className="w-7 h-7 text-emerald-600 dark:text-emerald-400" />
+                          </div>
+                          <h5 className="text-base font-extrabold text-emerald-800 dark:text-emerald-300">
+                            🆕 First-Time Renter
+                          </h5>
+                          <p className="text-xs text-emerald-700/80 dark:text-emerald-400/80 max-w-sm mx-auto leading-relaxed">
+                            This tenant has no prior rental history in our system. No previous ratings, payment records, or landlord reviews are available. You can proceed with registration and start building their rental profile.
+                          </p>
+                          <div className="flex justify-center gap-3 pt-2">
+                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">
+                              <ShieldCheck className="w-3 h-3" /> Clean Record
+                            </span>
+                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">
+                              <Star className="w-3 h-3" /> New Profile
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        /* Existing Tenant — Full Screening Stats */
+                        <>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {/* Reliability Index Card */}
                         <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
@@ -1279,6 +1375,8 @@ export default function TenantsPage() {
                           )}
                         </div>
                       </div>
+                        </>
+                      )}
                     </div>
 
                     <button
@@ -1448,24 +1546,38 @@ export default function TenantsPage() {
                         </div>
                       </div>
 
-                      <div>
-                        <label className="block text-xs font-bold mb-1 uppercase text-slate-500 dark:text-slate-400">Email</label>
-                        <input
-                          type="email"
-                          value={tenantEmail}
-                          onChange={(e) => setTenantEmail(e.target.value)}
-                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-                          placeholder="tenant@example.com"
-                        />
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-bold mb-1 uppercase text-slate-500 dark:text-slate-400">Email</label>
+                          <input
+                            type="email"
+                            value={tenantEmail}
+                            onChange={(e) => setTenantEmail(e.target.value)}
+                            className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                            placeholder="tenant@example.com"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold mb-1 uppercase text-slate-500 dark:text-slate-400">PAN Card Number</label>
+                          <input
+                            type="text"
+                            maxLength={10}
+                            value={panNumber}
+                            onChange={(e) => setPanNumber(e.target.value.toUpperCase())}
+                            className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                            placeholder="e.g. ABCDE1234F"
+                          />
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <label className="block text-xs font-bold mb-1 uppercase text-slate-500 dark:text-slate-400">Phone</label>
                           <input
-                            type="number"
+                            type="text"
+                            maxLength={10}
                             value={phone}
-                            onChange={(e) => setPhone(e.target.value)}
+                            onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
                             className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
                             placeholder="9876500001"
                             required
@@ -1474,9 +1586,10 @@ export default function TenantsPage() {
                         <div>
                           <label className="block text-xs font-bold mb-1 uppercase text-slate-500 dark:text-slate-400">Emergency Phone</label>
                           <input
-                            type="number"
+                            type="text"
+                            maxLength={10}
                             value={emergencyContact}
-                            onChange={(e) => setEmergencyContact(e.target.value)}
+                            onChange={(e) => setEmergencyContact(e.target.value.replace(/\D/g, '').slice(0, 10))}
                             className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
                             placeholder="Emergency Contact"
                           />
@@ -1672,9 +1785,10 @@ export default function TenantsPage() {
                     <div>
                       <label className="block text-[10px] font-bold mb-1 uppercase text-slate-500">Phone</label>
                       <input
-                        type="number"
+                        type="text"
+                        maxLength={10}
                         value={editPhone}
-                        onChange={(e) => setEditPhone(e.target.value)}
+                        onChange={(e) => setEditPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
                         className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-sm dark:bg-slate-900 text-slate-900 dark:text-white"
                         required
                       />
@@ -1682,9 +1796,10 @@ export default function TenantsPage() {
                     <div>
                       <label className="block text-[10px] font-bold mb-1 uppercase text-slate-500">Emergency Phone</label>
                       <input
-                        type="number"
+                        type="text"
+                        maxLength={10}
                         value={editEmergencyContact}
-                        onChange={(e) => setEditEmergencyContact(e.target.value)}
+                        onChange={(e) => setEditEmergencyContact(e.target.value.replace(/\D/g, '').slice(0, 10))}
                         className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-sm dark:bg-slate-900 text-slate-900 dark:text-white"
                       />
                     </div>
@@ -1789,6 +1904,28 @@ export default function TenantsPage() {
                       {selectedTenantForProfile.riskLevel} Risk
                     </span>
                   </div>
+                  {selectedTenantForProfile.verificationStatus === 'pending' && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const res = await api.put(`/tenants/${selectedTenantForProfile._id}`, {
+                            verificationStatus: 'verified'
+                          });
+                          setSelectedTenantForProfile(res.data.tenant);
+                          setTenants((prev) =>
+                            prev.map((t) => (t._id === selectedTenantForProfile._id ? { ...t, verificationStatus: 'verified' } : t))
+                          );
+                          showToast('Tenant verified successfully!', 'success');
+                        } catch (err: any) {
+                          showToast(err.response?.data?.message || 'Failed to verify tenant', 'error');
+                        }
+                      }}
+                      className="mt-2 w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md transition-all flex items-center justify-center gap-1"
+                    >
+                      Verify Tenant & Activate
+                    </button>
+                  )}
                 </div>
 
                 <div>

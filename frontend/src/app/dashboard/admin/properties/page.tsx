@@ -787,7 +787,7 @@ export default function AdminPropertiesPage() {
                             <div>
                               <span className="block font-semibold text-slate-800 dark:text-slate-100">{prop.propertyName}</span>
                               <span className="text-xs text-slate-400 flex items-center gap-1 font-normal mt-0.5">
-                                <MapPin className="w-3 h-3 text-slate-450" /> {prop.address}
+                                <MapPin className="w-3 h-3 text-slate-450" /> {prop.fullAddress || ''}
                               </span>
                             </div>
                           </td>

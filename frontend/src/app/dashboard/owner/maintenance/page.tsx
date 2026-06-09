@@ -150,9 +150,15 @@ export default function MaintenancePage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-5 border-b border-slate-100 dark:border-slate-800">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Maintenance Tickets</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Track appliance repairs, room utilities, and update resolving stages.</p>
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-gradient-to-br from-purple-500/20 to-purple-500/5 text-purple-600">
+            <Wrench className="w-5 h-5" />
+          </div>
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Facility Management</span>
+            <h2 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">Maintenance Tickets</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Track appliance repairs, room utilities, and update resolving stages.</p>
+          </div>
         </div>
         <button
           onClick={() => setIsAddModalOpen(true)}
@@ -163,19 +169,41 @@ export default function MaintenancePage() {
         </button>
       </div>
 
+      {/* Summary Stats */}
+      {requests.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm card-hover">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total</p>
+            <p className="text-2xl font-black text-slate-900 dark:text-white mt-1">{requests.length}</p>
+          </div>
+          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm card-hover">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Pending</p>
+            <p className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-1">{requests.filter(r => r.status === 'pending').length}</p>
+          </div>
+          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm card-hover">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">In Progress</p>
+            <p className="text-2xl font-black text-blue-600 dark:text-blue-400 mt-1">{requests.filter(r => r.status === 'in_progress').length}</p>
+          </div>
+          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm card-hover">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Resolved</p>
+            <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">{requests.filter(r => r.status === 'resolved').length}</p>
+          </div>
+        </div>
+      )}
+
       {/* Filters Bar */}
       {requests.length > 0 && (
-        <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-800/60">
+        <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm card-hover">
           {/* Status Tabs */}
           <div className="flex flex-wrap gap-1 sm:gap-1.5">
             {(['all', 'pending', 'in_progress', 'resolved'] as const).map((status) => (
               <button
                 key={status}
                 onClick={() => setStatusFilter(status)}
-                className={`px-2.5 py-1.5 sm:px-4 sm:py-2 rounded-xl text-[11px] sm:text-xs font-bold whitespace-nowrap transition-all capitalize ${
+                className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-[11px] sm:text-xs font-bold whitespace-nowrap transition-all capitalize ${
                   statusFilter === status
-                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm border border-slate-200/50 dark:border-slate-800'
-                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                    ? 'bg-primary/10 text-primary shadow-sm border border-primary/20'
+                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
                 }`}
               >
                 {status.replace('_', ' ')}
@@ -186,13 +214,13 @@ export default function MaintenancePage() {
           <div className="flex flex-col sm:flex-row gap-3">
             {/* Search Input */}
             <div className="relative flex-1 sm:w-64">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-405 dark:text-slate-500" />
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search tickets..."
-                className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 dark:border-slate-850 bg-white dark:bg-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all text-slate-800 dark:text-slate-100"
+                className="input-focus w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs text-slate-800 dark:text-slate-100"
               />
               {searchQuery && (
                 <button
@@ -209,7 +237,7 @@ export default function MaintenancePage() {
               <select
                 value={priorityFilter}
                 onChange={(e) => setPriorityFilter(e.target.value as any)}
-                className="w-full sm:w-36 pl-3 pr-8 py-2 rounded-xl border border-slate-200 dark:border-slate-850 bg-white dark:bg-slate-900 text-xs focus:outline-none text-slate-650 dark:text-slate-400 font-semibold appearance-none cursor-pointer"
+                className="input-focus w-full sm:w-36 pl-3 pr-8 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs text-slate-600 dark:text-slate-400 font-semibold appearance-none cursor-pointer"
               >
                 <option value="all">All Priorities</option>
                 <option value="high">High Priority</option>
@@ -266,7 +294,7 @@ export default function MaintenancePage() {
         </div>
       ) : (
         /* Tickets Grid */
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-stagger">
           {filteredRequests.map((req) => {
             const priorityColors = {
               high: {

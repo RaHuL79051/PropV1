@@ -3,6 +3,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 export interface ITenantInvite extends Document {
   owner: mongoose.Types.ObjectId;
   aadhaarNumber: string;
+  panNumber?: string;
   email: string;
   tokenHash: string;
   status: 'pending' | 'accepted' | 'expired';
@@ -18,6 +19,7 @@ const TenantInviteSchema: Schema = new Schema(
   {
     owner: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     aadhaarNumber: { type: String, required: true, trim: true },
+    panNumber: { type: String, trim: true, default: '' },
     email: { type: String, required: true, trim: true, lowercase: true },
     tokenHash: { type: String, required: true, unique: true, index: true },
     status: {

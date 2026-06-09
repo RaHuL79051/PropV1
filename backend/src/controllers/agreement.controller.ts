@@ -185,7 +185,7 @@ export const downloadAgreementPdf = async (req: AuthenticatedRequest, res: Respo
     // Property details
     doc.fontSize(14).text('2. PREMISES', { underline: true });
     doc.fontSize(12).text(`Property Name: ${(agreement.property as any)?.propertyName || 'N/A'}`);
-    doc.text(`Address: ${(agreement.property as any)?.address || 'N/A'}`);
+    doc.text(`Address: ${(agreement.property as any)?.fullAddress || (agreement.property as any)?.address || 'N/A'}`);
     doc.text(`Room Assigned: Room No. ${(agreement.room as any)?.roomNumber || 'N/A'}`);
     doc.moveDown(1.5);
 

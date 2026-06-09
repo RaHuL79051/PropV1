@@ -82,7 +82,7 @@ export const updateTenantStatsByAadhaar = async (aadhaarNumber: string): Promise
   let riskLevel: 'low' | 'medium' | 'high' = 'low';
   if (score < 600) {
     riskLevel = 'high';
-  } else if (score < 750) {
+  } else if (score < 700) {
     riskLevel = 'medium';
   }
 

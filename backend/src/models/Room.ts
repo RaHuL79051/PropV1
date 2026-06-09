@@ -9,6 +9,11 @@ export interface IRoom extends Document {
   monthlyRent: number;
   agreementDocName?: string;
   agreementDocData?: string;
+  // Room filters / checklist
+  flatCategory?: string;
+  propertyType?: string[];
+  preferredTenant?: string[];
+  furnishedType?: string;
 }
 
 const RoomSchema: Schema = new Schema(
@@ -28,7 +33,26 @@ const RoomSchema: Schema = new Schema(
     },
     monthlyRent: { type: Number, required: true, min: 0 },
     agreementDocName: { type: String, default: '' },
-    agreementDocData: { type: String, default: '' }
+    agreementDocData: { type: String, default: '' },
+    // Room filters / checklist fields
+    flatCategory: {
+      type: String,
+      enum: ['1RK', '1BHK', '2BHK', '3BHK', '4BHK', ''],
+      default: ''
+    },
+    propertyType: [{
+      type: String,
+      enum: ['Fully Independent', 'Owner Free', 'Living Couple', 'Student Allowed']
+    }],
+    preferredTenant: [{
+      type: String,
+      enum: ['All', 'Boys', 'Boys & Girls', 'Company', 'Family', 'Family & Boys', 'Family & Girls', 'Girls']
+    }],
+    furnishedType: {
+      type: String,
+      enum: ['Fully Furnished', 'Semi Furnished', 'Unfurnished', ''],
+      default: ''
+    }
   },
   { timestamps: true }
 );

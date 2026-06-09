@@ -62,6 +62,7 @@ export const tenantSchema = z.object({
   body: z.object({
     fullName: z.string().min(2, 'Name is required'),
     aadhaarNumber: z.string().length(12, 'Aadhaar must be exactly 12 digits'),
+    panNumber: z.string().length(10, 'PAN must be exactly 10 characters').optional().or(z.literal('')),
     email: z.string().email('Invalid email address').optional().or(z.literal('')),
     phone: z.string().min(10, 'Phone is required'),
     emergencyContact: z.string().optional().or(z.literal('')),
@@ -74,6 +75,7 @@ export const tenantSchema = z.object({
 export const tenantInviteSchema = z.object({
   body: z.object({
     aadhaarNumber: z.string().length(12, 'Aadhaar must be exactly 12 digits'),
+    panNumber: z.string().length(10, 'PAN must be exactly 10 characters').optional().or(z.literal('')),
     email: z.string().email('Invalid email address').optional().or(z.literal('')),
     sendMethod: z.enum(['email', 'whatsapp']).optional(),
     whatsappNumber: z.string().optional().or(z.literal('')),
@@ -86,6 +88,7 @@ export const acceptTenantInviteSchema = z.object({
     fullName: z.string().min(2, 'Name is required'),
     email: z.string().email('Invalid email address'),
     phone: z.string().min(10, 'Phone is required'),
+    panNumber: z.string().length(10, 'PAN must be exactly 10 characters').optional().or(z.literal('')),
     emergencyContact: z.string().optional().or(z.literal('')),
     occupation: z.string().optional().or(z.literal('')),
     address: z.string().min(5, 'Address is required'),

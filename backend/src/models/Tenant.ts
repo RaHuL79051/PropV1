@@ -3,6 +3,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 export interface ITenant extends Document {
   fullName: string;
   aadhaarNumber: string;
+  panNumber?: string;
   email?: string;
   phone: string;
   emergencyContact: string;
@@ -40,6 +41,7 @@ const TenantSchema: Schema = new Schema(
   {
     fullName: { type: String, required: true, trim: true },
     aadhaarNumber: { type: String, required: true, trim: true },
+    panNumber: { type: String, trim: true, default: '' },
     email: { type: String, trim: true, lowercase: true, default: '' },
     phone: { type: String, required: true, trim: true },
     emergencyContact: { type: String, default: '', trim: true },
