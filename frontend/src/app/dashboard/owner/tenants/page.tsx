@@ -699,21 +699,21 @@ export default function TenantsPage() {
       {/* Header Banner */}
       <div className="rounded-3xl overflow-hidden border border-white/10 bg-gradient-to-r from-primary via-primary-hover to-accent text-white shadow-xl relative">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.18),transparent_35%)]" />
-        <div className="relative p-6 md:p-7 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
+        <div className="relative p-5 md:p-7 flex flex-col gap-3 md:gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="min-w-0">
             <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-white/75">Tenant Operations</p>
-            <h2 className="text-2xl md:text-3xl font-black tracking-tight mt-1">Tenants Directory</h2>
-            <p className="text-sm text-white/80 mt-2 max-w-2xl">Manage and view all tenant profiles and statuses.</p>
+            <h2 className="text-xl md:text-2xl lg:text-3xl font-black tracking-tight mt-1">Tenants Directory</h2>
+            <p className="text-xs sm:text-sm text-white/80 mt-1.5 sm:mt-2 max-w-2xl">Manage and view all tenant profiles and statuses.</p>
           </div>
           <button
             onClick={() => {
               fetchAllocationData();
               setIsAddModalOpen(true);
             }}
-            className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full bg-white text-primary hover:bg-slate-100 text-sm font-extrabold shadow-lg shadow-black/10 transition-all hover:scale-[1.02] whitespace-nowrap"
+            className="inline-flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 rounded-full bg-white text-primary hover:bg-slate-100 text-xs sm:text-sm font-extrabold shadow-lg shadow-black/10 transition-all hover:scale-[1.02] shrink-0"
           >
             <Plus className="w-4 h-4" />
-            Add New Tenant
+            <span className="hidden sm:inline">Add New Tenant</span><span className="sm:hidden">Add Tenant</span>
           </button>
         </div>
       </div>

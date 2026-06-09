@@ -1064,11 +1064,11 @@ export default function PropertiesPage() {
           <div className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-primary via-indigo-600 to-blue-700 text-white shadow-xl">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.15),transparent_50%)]" />
             <div className="absolute -bottom-8 -right-8 w-32 h-32 rounded-full bg-white/5 blur-2xl" />
-            <div className="relative p-6 md:p-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="relative p-5 md:p-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/70">Real Estate Portfolio</span>
-                <h2 className="text-2xl font-black tracking-tight mt-1">My Properties</h2>
-                <p className="text-sm text-white/80 mt-1">Manage real estate listings, rooms, and rent amounts.</p>
+                <h2 className="text-xl sm:text-2xl font-black tracking-tight mt-1">My Properties</h2>
+                <p className="text-xs sm:text-sm text-white/80 mt-1">Manage real estate listings, rooms, and rent amounts.</p>
               </div>
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
                 <div className="relative flex-1 sm:w-64">
@@ -1094,31 +1094,31 @@ export default function PropertiesPage() {
 
           {/* Summary Stats */}
           {properties.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm card-hover flex items-center justify-between">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+              <div className="p-4 sm:p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm card-hover flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Properties</p>
+                  <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Properties</p>
                   <h3 className="text-2xl font-black text-slate-900 dark:text-white mt-1">{properties.length}</h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Registered listings</p>
                 </div>
-                <div className="p-3 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 text-primary shadow-sm">
+                <div className="p-2.5 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 text-primary shadow-sm">
                   <Building className="w-5 h-5" />
                 </div>
               </div>
-              <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm card-hover flex items-center justify-between">
+              <div className="p-4 sm:p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm card-hover flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Rooms</p>
+                  <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Rooms</p>
                   <h3 className="text-2xl font-black text-slate-900 dark:text-white mt-1">{properties.reduce((sum, p) => sum + (p.totalRooms || 0), 0)}</h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Across all properties</p>
+                  <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">Across all properties</p>
                 </div>
-                <div className="p-3 rounded-xl bg-gradient-to-br from-amber-500/20 to-amber-500/5 text-amber-600 shadow-sm">
+                <div className="p-2.5 rounded-xl bg-gradient-to-br from-amber-500/20 to-amber-500/5 text-amber-600 shadow-sm">
                   <BedDouble className="w-5 h-5" />
                 </div>
               </div>
-              <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm card-hover flex items-center justify-between">
+              <div className="p-4 sm:p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm card-hover flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Bed Licensing</p>
-                  <h3 className={`text-2xl font-black mt-1 ${billingStatus && billingStatus.unpaidPersons > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                  <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-400">Bed Licensing</p>
+                  <h3 className={`text-xl sm:text-2xl font-black mt-0.5 ${billingStatus && billingStatus.unpaidPersons > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
                     {billingStatus ? `${billingStatus.paidPersons}/${billingStatus.totalTenants}` : '...'}
                   </h3>
                   <p className={`text-xs mt-0.5 ${billingStatus && billingStatus.unpaidPersons > 0 ? 'text-amber-500' : 'text-emerald-500'}`}>
@@ -1373,21 +1373,21 @@ export default function PropertiesPage() {
               <div className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-indigo-600 via-primary to-blue-600 text-white shadow-xl">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.15),transparent_50%)]" />
                 <div className="absolute -bottom-8 -right-8 w-32 h-32 rounded-full bg-white/5 blur-2xl" />
-                <div className="relative p-6 md:p-7 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                  <div className="flex items-center gap-4">
+                <div className="relative p-5 md:p-7 flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4">
+                  <div className="flex items-center gap-3 md:gap-4 min-w-0">
                     <button
                       onClick={() => {
                         setCurrentView('properties');
                         setSelectedProperty(null);
                       }}
-                      className="group relative w-10 h-10 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 backdrop-blur-sm border border-white/20"
+                      className="group relative w-9 h-9 md:w-10 md:h-10 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 backdrop-blur-sm border border-white/20 shrink-0"
                     >
-                      <ArrowLeft className="relative z-10 w-5 h-5 text-white transition-colors duration-300" />
+                      <ArrowLeft className="relative z-10 w-4 h-4 md:w-5 md:h-5 text-white transition-colors duration-300" />
                     </button>
-                    <div>
+                    <div className="min-w-0">
                       <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/70">Room Management</span>
-                      <h2 className="text-2xl font-black tracking-tight mt-0.5">{selectedProperty.propertyName} - Rooms</h2>
-                      <p className="text-sm text-white/80 mt-0.5">Manage all room allocations and statuses for this property.</p>
+                      <h2 className="text-lg sm:text-xl md:text-2xl font-black tracking-tight mt-0.5 truncate">{selectedProperty.propertyName} - Rooms</h2>
+                      <p className="text-xs sm:text-sm text-white/80 mt-0.5 truncate">Manage all room allocations and statuses for this property.</p>
                     </div>
                   </div>
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
@@ -1414,36 +1414,36 @@ export default function PropertiesPage() {
             </div>
 
             {/* Bento Analytics Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm flex items-start justify-between card-hover">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm flex items-center justify-between gap-3 card-hover">
                 <div>
                   <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Total Rooms</p>
-                  <h3 className="text-3xl text-slate-900 dark:text-white font-extrabold font-mono">{totalRoomsCount}</h3>
-                  <p className="text-xs text-slate-400 mt-1.5">Registered units</p>
+                  <h3 className="text-xl sm:text-2xl text-slate-900 dark:text-white font-extrabold font-mono mt-0.5">{totalRoomsCount}</h3>
+                  <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5 truncate">Registered units</p>
                 </div>
-                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
                   <Building className="w-5 h-5" />
                 </div>
               </div>
 
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm flex items-start justify-between card-hover">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm flex items-center justify-between gap-3 card-hover">
                 <div>
                   <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Overall Occupancy</p>
-                  <h3 className="text-3xl text-slate-900 dark:text-white font-extrabold font-mono">{overallOccupancyPercent}%</h3>
+                  <h3 className="text-xl sm:text-2xl text-slate-900 dark:text-white font-extrabold font-mono mt-0.5">{overallOccupancyPercent}%</h3>
                   <p className="text-xs text-slate-450 mt-1.5">{occupiedRoomsCount} / {totalRoomsCount} Rooms occupied</p>
                 </div>
-                <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-600">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-600">
                   <Users className="w-5 h-5" />
                 </div>
               </div>
 
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm flex items-start justify-between card-hover">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm flex items-center justify-between gap-3 card-hover">
                 <div>
                   <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Available Beds</p>
-                  <h3 className="text-3xl text-slate-900 dark:text-white font-extrabold font-mono">{availableBedsCount}</h3>
-                  <p className="text-xs text-slate-400 mt-1.5">Out of {totalBedsCount} total beds</p>
+                  <h3 className="text-xl sm:text-2xl text-slate-900 dark:text-white font-extrabold font-mono mt-0.5">{availableBedsCount}</h3>
+                  <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5 truncate">Out of {totalBedsCount} total beds</p>
                 </div>
-                <div className="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center text-amber-600">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-amber-500/10 flex items-center justify-center text-amber-600">
                   <BedDouble className="w-5 h-5" />
                 </div>
               </div>
@@ -1752,21 +1752,21 @@ export default function PropertiesPage() {
               <div className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-600 text-white shadow-xl">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.15),transparent_50%)]" />
                 <div className="absolute -bottom-8 -right-8 w-32 h-32 rounded-full bg-white/5 blur-2xl" />
-                <div className="relative p-6 md:p-7 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                  <div className="flex items-center gap-4">
+                <div className="relative p-5 md:p-7 flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4">
+                  <div className="flex items-center gap-3 md:gap-4 min-w-0">
                     <button
                       onClick={() => {
                         setCurrentView('properties');
                         setSelectedProperty(null);
                       }}
-                      className="group relative w-10 h-10 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 backdrop-blur-sm border border-white/20"
+                      className="group relative w-9 h-9 md:w-10 md:h-10 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 backdrop-blur-sm border border-white/20 shrink-0"
                     >
-                      <ArrowLeft className="relative z-10 w-5 h-5 text-white transition-colors duration-300" />
+                      <ArrowLeft className="relative z-10 w-4 h-4 md:w-5 md:h-5 text-white transition-colors duration-300" />
                     </button>
-                    <div>
+                    <div className="min-w-0">
                       <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/70">Occupant Management</span>
-                      <h2 className="text-2xl font-black tracking-tight mt-0.5">Room {selectedRoom.roomNumber} - Occupants</h2>
-                      <p className="text-sm text-white/80 mt-0.5">View and manage occupants assigned to this unit.</p>
+                      <h2 className="text-lg sm:text-xl md:text-2xl font-black tracking-tight mt-0.5 truncate">Room {selectedRoom.roomNumber} - Occupants</h2>
+                      <p className="text-xs sm:text-sm text-white/80 mt-0.5 truncate">View and manage occupants assigned to this unit.</p>
                     </div>
                   </div>
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
@@ -1814,9 +1814,9 @@ export default function PropertiesPage() {
 
             {/* Flat Lease Agreement Card */}
             {selectedRoom.roomType === 'flat' && (
-              <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4 card-hover">
+              <div className="p-4 sm:p-5 rounded-xl sm:rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm mb-4 sm:mb-6 flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 card-hover">
                 <div className="flex items-center gap-3 min-w-0 w-full md:w-auto">
-                  <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
+                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
                     <FileText className="w-5 h-5" />
                   </div>
                   <div className="min-w-0 flex-1">
@@ -1847,7 +1847,7 @@ export default function PropertiesPage() {
                           }}
                           className="flex-1 sm:flex-initial justify-center px-3.5 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 border border-emerald-500/20 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
                         >
-                          <Download className="w-3.5 h-3.5" /> Download Shared Agreement
+                          <Download className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Download Shared Agreement</span><span className="sm:hidden">Download</span>
                         </button>
                         <button
                           onClick={() => triggerRemoveAgreement(selectedRoom._id)}
@@ -1858,7 +1858,7 @@ export default function PropertiesPage() {
                         </button>
                       </div>
                       <label className="w-full sm:w-auto justify-center px-3.5 py-2 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 cursor-pointer rounded-xl text-xs font-bold transition-all flex items-center gap-1.5">
-                        <Upload className="w-3.5 h-3.5" /> Replace Agreement
+                        <Upload className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Replace Agreement</span><span className="sm:hidden">Replace</span>
                         <input
                           type="file"
                           className="hidden"
@@ -1891,7 +1891,7 @@ export default function PropertiesPage() {
                     </>
                   ) : (
                     <label className="w-full sm:w-auto justify-center px-3.5 py-2 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 cursor-pointer rounded-xl text-xs font-bold transition-all flex items-center gap-1.5">
-                      <Upload className="w-3.5 h-3.5" /> Upload Shared Agreement
+                      <Upload className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Upload Shared Agreement</span><span className="sm:hidden">Upload</span>
                       <input
                         type="file"
                         className="hidden"
@@ -1927,7 +1927,7 @@ export default function PropertiesPage() {
             )}
 
             {/* Linked Users Table */}
-            <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden card-hover" style={{ width: 1250 }}>
+            <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden card-hover" >
               <div className="p-4 border-b border-slate-100 dark:border-slate-850 bg-slate-50 dark:bg-slate-950 flex justify-between items-center">
                 <h3 className="font-bold text-xs uppercase tracking-wider text-slate-400">Linked Users Directory</h3>
                 {linkedUserSearchQuery && (
