@@ -312,7 +312,7 @@ export default function AgreementsPage() {
             ))}
           </div>
         </>
-      )
+      )}
 
       {/* Delete Confirmation Modal */}
       {isDeleteModalOpen && (
