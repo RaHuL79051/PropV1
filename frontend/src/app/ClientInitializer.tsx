@@ -9,9 +9,10 @@ export default function ClientInitializer() {
   useEffect(() => {
     initialize();
 
-    // Ensure dark theme class is always removed from html element
+    // Ensure dark theme class is always removed and light mode is forced
     if (typeof window !== 'undefined') {
       document.documentElement.classList.remove('dark');
+      document.documentElement.style.colorScheme = 'light';
       localStorage.removeItem('theme');
     }
     // Register PWA Service Worker (Production Only)

@@ -406,18 +406,17 @@ export default function OwnerDashboardPage() {
                     <stop offset="95%" stopColor="#EF4444" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" className="dark:hidden" />
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" className="hidden dark:block" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
                 <XAxis dataKey="month" stroke="#94A3B8" fontSize={11} fontWeight={600} />
                 <YAxis stroke="#94A3B8" fontSize={11} fontWeight={600} />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: '#1E293B',
-                    border: 'none',
+                    backgroundColor: '#FFFFFF',
+                    border: '1px solid #E2E8F0',
                     borderRadius: '12px',
-                    color: '#F8FAFC',
+                    color: '#0F172A',
                     fontSize: '12px',
-                    boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'
+                    boxShadow: '0 10px 15px -3px rgba(0,0,0,0.08)'
                   }} 
                 />
                 <Area type="monotone" dataKey="revenue" stroke="#2563EB" strokeWidth={3} fillOpacity={1} fill="url(#colorRevenue)" name="Revenue" />
