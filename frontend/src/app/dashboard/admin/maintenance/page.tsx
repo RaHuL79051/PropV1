@@ -8,6 +8,7 @@ import {
   MapPin, User, Loader2, X, Search 
 } from 'lucide-react';
 import { MaintenanceRequest, Tenant } from '../../../../types';
+import { getApiErrorMessage } from '../../../../lib/apiError';
 
 export default function AdminMaintenancePage() {
   const showToast = useToastStore((state) => state.showToast);
@@ -35,7 +36,7 @@ export default function AdminMaintenancePage() {
       setRequests(reqsRes.data);
       setTenants(tenantsRes.data.filter((t: any) => t.assignedProperty && t.assignedRoom));
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to fetch tickets', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to fetch tickets'), 'error');
     } finally {
       setIsLoading(false);
     }
@@ -74,7 +75,7 @@ export default function AdminMaintenancePage() {
       resetForm();
       fetchRequestsAndTenants();
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to raise maintenance ticket', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to raise maintenance ticket'), 'error');
     } finally {
       setSubmitting(false);
     }
@@ -86,7 +87,7 @@ export default function AdminMaintenancePage() {
       showToast(`Ticket status updated to ${status.replace('_', ' ')}!`, 'success');
       fetchRequestsAndTenants();
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to update ticket status', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to update ticket status'), 'error');
     }
   };
 
@@ -243,7 +244,7 @@ export default function AdminMaintenancePage() {
       {/* Raise Ticket Modal */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative max-h-[90dvh] overflow-y-auto">
             <button
               onClick={() => setIsAddModalOpen(false)}
               className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400"
@@ -280,6 +281,7 @@ export default function AdminMaintenancePage() {
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-805 bg-transparent text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-primary outline-none"
                   placeholder="e.g. Geyser is leaking"
                   required
+                  minLength={2}
                 />
               </div>
 
@@ -291,6 +293,7 @@ export default function AdminMaintenancePage() {
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-805 bg-transparent text-sm h-24 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary outline-none"
                   placeholder="Describe what repair work is required in detail..."
                   required
+                  minLength={5}
                 />
               </div>
 

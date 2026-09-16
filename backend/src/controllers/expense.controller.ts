@@ -98,7 +98,7 @@ export const deleteExpense = async (req: AuthenticatedRequest, res: Response, ne
     }
 
     if (expense.owner.toString() !== ownerId && req.user?.role !== 'admin') {
-      throw new AppError('Unauthorized to delete this expense', 403);
+      throw new AppError('You can only delete your own expenses.', 403);
     }
 
     await Expense.findByIdAndDelete(id);

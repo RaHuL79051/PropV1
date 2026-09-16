@@ -90,7 +90,7 @@ export const createBedBillingOrder = async (req: AuthenticatedRequest, res: Resp
     const paidPersons = Number(owner.paidBeds) || 0;
     const unpaidPersons = Math.max(0, totalTenants - 2 - paidPersons);
     if (unpaidPersons === 0) {
-      throw new AppError('All persons are already paid for or within free limit', 400);
+      throw new AppError('You have no outstanding tenant licences to pay for.', 400);
     }
 
     const amountDue = unpaidPersons * 20; // ₹20 per person
@@ -120,14 +120,12 @@ export const createBedBillingOrder = async (req: AuthenticatedRequest, res: Resp
         keyId: process.env.RAZORPAY_KEY_ID
       });
     } catch (razorpayError: any) {
-      const isDevelopment = process.env.NODE_ENV !== 'production';
-      if (isDevelopment) {
-        console.warn('[Billing] Razorpay order creation failed in development. Falling back to simulated mode.', {
-          message: razorpayError?.error?.description || razorpayError?.message
-        });
-        return res.status(201).json(buildMockOrderResponse(ownerId!, amountDue));
-      }
-
+      // Never silently downgrade to the simulated flow while real credentials are
+      // configured: verification would then reject the payment anyway, and the
+      // owner would have no way to actually pay.
+      console.error('[Billing] Razorpay order creation failed.', {
+        message: razorpayError?.error?.description || razorpayError?.message
+      });
       throw new AppError(
         razorpayError?.error?.description || 'Unable to create Razorpay order. Please verify Razorpay credentials.',
         502
@@ -146,11 +144,14 @@ export const verifyBedBillingPayment = async (req: AuthenticatedRequest, res: Re
       throw new AppError('Owner not found', 404);
     }
 
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, isMock } = req.body;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
 
-    if (isRazorpayConfigured() && !isMock) {
+    // Whether this is a real or simulated payment is decided by the server's own
+    // configuration. A client-supplied "isMock" flag must never be able to skip
+    // signature verification, or licences could be granted without payment.
+    if (isRazorpayConfigured()) {
       if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-        throw new AppError('Missing payment verification details', 400);
+        throw new AppError('This payment could not be confirmed because the gateway response was incomplete. No licences were granted.', 400);
       }
 
       // Verify HMAC SHA256 Signature
@@ -159,18 +160,23 @@ export const verifyBedBillingPayment = async (req: AuthenticatedRequest, res: Re
       const generatedSignature = hmac.digest('hex');
 
       if (generatedSignature !== razorpay_signature) {
-        throw new AppError('Payment signature mismatch. Transaction untrusted.', 400);
+        throw new AppError('This payment could not be verified and was rejected. If you were charged, please contact support.', 400);
       }
     } else {
-      // Sandbox validation check
-      if (!razorpay_order_id && !isMock) {
-        throw new AppError('Missing mock validation details', 400);
+      // Simulated sandbox mode: no gateway is configured, so accept the mock order.
+      if (!razorpay_order_id) {
+        throw new AppError('This payment could not be confirmed because the order reference was missing.', 400);
       }
     }
 
+    // Only grant licences that are actually outstanding.
+    const outstanding = await TenantOwnerConnection.countDocuments({ owner: ownerId, isDeleted: false });
+    if (Math.max(0, outstanding - 2 - (owner.paidBeds || 0)) === 0) {
+      throw new AppError('You have no outstanding tenant licences to pay for.', 400);
+    }
+
     // Fetch actual current tenant count to update owner's license limit
-    const totalTenants = await TenantOwnerConnection.countDocuments({ owner: ownerId, isDeleted: false });
-    const newlyPaidLimit = Math.max(0, totalTenants - 2);
+    const newlyPaidLimit = Math.max(0, outstanding - 2);
 
     // Set paidPersons to the new total
     const oldPaidPersons = owner.paidBeds || 0;

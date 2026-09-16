@@ -5,8 +5,8 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuthStore } from '../../store/authStore';
 import { useToastStore } from '../../store/toastStore';
-import { 
-  Building2, Home, Users, FileText, 
+import {
+  Building2, Home, Users, FileText,
   CreditCard, Wrench, BarChart3, LogOut, Loader2, UserCheck, ShieldAlert, X
 } from 'lucide-react';
 
@@ -19,12 +19,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const getDeviceOS = () => {
     const userAgent = typeof window !== 'undefined' ? (navigator.userAgent || navigator.vendor || (window as any).opera) : '';
-    
+
     // iOS detection
     if (/iPad|iPhone|iPod/.test(userAgent) && !(window as any).MSStream) {
       return 'ios';
     }
-    
+
     // iPadOS 13+ detection
     if (navigator.maxTouchPoints && navigator.maxTouchPoints > 2 && /Macintosh/.test(userAgent)) {
       return 'ios';
@@ -144,11 +144,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <Link
                   key={link.name}
                   href={link.href}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${
-                    isActive
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${isActive
                       ? 'bg-primary text-white shadow-md shadow-primary/20'
                       : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200'
-                  }`}
+                    }`}
                 >
                   <Icon className="w-4 h-4" />
                   {link.name}
@@ -197,9 +196,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 capitalize bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-md border border-slate-200/50 dark:border-slate-700/50">
-              {user.role}
-            </span>
             <button
               onClick={handleLogout}
               className="lg:hidden p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-all"
@@ -211,13 +207,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </header>
 
         {/* Content Body */}
-        <main className="flex-1 p-4 md:p-6 pb-28 sm:pb-24 lg:pb-6 max-w-7xl w-full mx-auto">
+        <main className="flex-1 p-4 md:p-6 lg:p-8 pb-28 sm:pb-24 lg:pb-8 w-full">
           {children}
         </main>
       </div>
 
       {/* 3. Sticky Bottom Navigation Bar on Mobile */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 lg:hidden border-t border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-950/90 backdrop-blur-lg shadow-[0_-4px_20px_-4px_rgba(0,0,0,0.1)] pb-safe">
+      <div className="fixed bottom-0 left-0 right-0 z-40 lg:hidden border-t border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-950/90 backdrop-blur-lg shadow-[0_-4px_20px_-4px_rgba(0,0,0,0.1)] pb-safe">
         <nav className="flex items-center justify-between gap-1 px-2 py-2 overflow-x-auto">
           {links.map((link) => {
             const Icon = link.icon;
@@ -226,11 +222,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <Link
                 key={link.name}
                 href={link.href}
-                className={`flex min-w-0 flex-1 basis-0 flex-col items-center gap-0.5 py-1 transition-all ${
-                  isActive
+                className={`flex min-w-0 flex-1 basis-0 flex-col items-center gap-0.5 py-1 transition-all ${isActive
                     ? 'text-primary scale-105 font-bold'
                     : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                }`}
+                  }`}
               >
                 <Icon className={`w-5 h-5 shrink-0 ${isActive ? 'stroke-[2.5px]' : 'stroke-[2px]'}`} />
                 <span className="text-[10px] leading-none truncate max-w-full text-center">{link.name}</span>

@@ -11,6 +11,7 @@ import {
   FileText, ChevronDown, ListFilter
 } from 'lucide-react';
 import { Payment, Tenant } from '../../../../types';
+import { getApiErrorMessage } from '../../../../lib/apiError';
 
 interface Expense {
   _id: string;
@@ -104,7 +105,7 @@ function PaymentsContent() {
       // Filter tenants that actually live in rooms
       setTenants(tenantsRes.data.filter((t: any) => t.assignedProperty && t.assignedRoom));
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to fetch payments data', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to fetch payments data'), 'error');
     } finally {
       setIsLoading(false);
     }
@@ -131,7 +132,7 @@ function PaymentsContent() {
       setExpenses(res.data.expenses);
       setTotalExpenses(res.data.totalExpenses);
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to load expenses', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to load expenses'), 'error');
     } finally {
       setIsExpensesLoading(false);
     }
@@ -175,7 +176,7 @@ function PaymentsContent() {
       resetInvoiceForm();
       fetchPaymentsAndTenants();
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to generate invoice', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to generate invoice'), 'error');
     } finally {
       setSubmitting(false);
     }
@@ -198,7 +199,7 @@ function PaymentsContent() {
       setTransactionId('');
       fetchPaymentsAndTenants();
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to clear invoice', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to clear invoice'), 'error');
     } finally {
       setSubmitting(false);
     }
@@ -228,7 +229,7 @@ function PaymentsContent() {
       setExpenseDescription('');
       fetchExpenses();
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to add expense', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to add expense'), 'error');
     } finally {
       setIsExpenseSubmitting(false);
     }
@@ -249,7 +250,7 @@ function PaymentsContent() {
       setDeleteExpenseId('');
       fetchExpenses();
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to delete expense', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to delete expense'), 'error');
     } finally {
       setIsDeleting(false);
     }
@@ -279,7 +280,7 @@ function PaymentsContent() {
   return (
     <div className="space-y-6 animate-stagger">
       {/* Header Panel */}
-      <div className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-600 text-white shadow-xl">
+      <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white shadow-xl">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.15),transparent_50%)]" />
         <div className="absolute -bottom-8 -right-8 w-32 h-32 rounded-full bg-white/5 blur-2xl" />
         <div className="relative p-6 md:p-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -296,26 +297,25 @@ function PaymentsContent() {
                 : 'Keep track of operations, maintenance outlays, and bills.'}
             </p>
           </div>
-        <button
-          onClick={() => activeTab === 'payments' ? setIsAddModalOpen(true) : setIsAddExpenseModalOpen(true)}
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/15 hover:bg-white/25 text-white text-sm font-bold shadow-md backdrop-blur-sm transition-all hover:scale-105 shrink-0 w-full sm:w-auto justify-center border border-white/20"
-        >
-          <Plus className="w-4 h-4" />
-          {activeTab === 'payments' ? 'Generate Invoice' : 'Add Expense'}
-        </button>
+          <button
+            onClick={() => activeTab === 'payments' ? setIsAddModalOpen(true) : setIsAddExpenseModalOpen(true)}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/15 hover:bg-white/25 text-white text-sm font-bold shadow-md backdrop-blur-sm transition-all hover:scale-105 shrink-0 w-full sm:w-auto justify-center border border-white/20"
+          >
+            <Plus className="w-4 h-4" />
+            {activeTab === 'payments' ? 'Generate Invoice' : 'Add Expense'}
+          </button>
+        </div>
       </div>
-    </div>
 
       {/* Tab Selector */}
       <div className="flex p-1.5 bg-slate-100 dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 w-full sm:w-auto">
         <button
           type="button"
           onClick={() => setActiveTab('payments')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all ${
-            activeTab === 'payments'
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all ${activeTab === 'payments'
               ? 'bg-white dark:bg-slate-800 text-primary shadow-sm border border-slate-200 dark:border-slate-700'
               : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-          }`}
+            }`}
         >
           <CreditCard className="w-4 h-4" />
           Rent Invoices
@@ -323,11 +323,10 @@ function PaymentsContent() {
         <button
           type="button"
           onClick={() => setActiveTab('expenses')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all ${
-            activeTab === 'expenses'
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all ${activeTab === 'expenses'
               ? 'bg-white dark:bg-slate-800 text-primary shadow-sm border border-slate-200 dark:border-slate-700'
               : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-          }`}
+            }`}
         >
           <Wallet className="w-4 h-4" />
           Portfolio Expenses
@@ -580,9 +579,6 @@ function PaymentsContent() {
                 </h3>
               </div>
             </div>
-            <div className="text-xs font-semibold text-slate-550 dark:text-slate-400 max-w-sm md:text-right">
-              Showing aggregated outlays reflecting the currently active filter conditions. Use the control panel below to slice data.
-            </div>
           </div>
 
           {/* Filter Control Panel */}
@@ -606,8 +602,8 @@ function PaymentsContent() {
                         setEndDate('');
                       }}
                       className={`py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all capitalize ${rangeFilter === r
-                          ? 'bg-primary text-white shadow-sm'
-                          : 'text-slate-550 dark:text-slate-400 hover:bg-slate-105 dark:hover:bg-slate-900/60'
+                        ? 'bg-primary text-white shadow-sm'
+                        : 'text-slate-550 dark:text-slate-400 hover:bg-slate-105 dark:hover:bg-slate-900/60'
                         }`}
                     >
                       {r === 'all' ? 'All' : r.replace('ly', '')}
@@ -791,7 +787,7 @@ function PaymentsContent() {
       {/* 1. Create Invoice Modal */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative max-h-[90dvh] overflow-y-auto">
             <button
               onClick={() => setIsAddModalOpen(false)}
               className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
@@ -863,7 +859,7 @@ function PaymentsContent() {
       {/* 2. Record Payment Modal */}
       {isPayModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative max-h-[90dvh] overflow-y-auto">
             <button
               onClick={() => setIsPayModalOpen(false)}
               className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
@@ -915,7 +911,7 @@ function PaymentsContent() {
       {/* 3. Add Expense Modal */}
       {isAddExpenseModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative animate-in zoom-in-95 duration-200">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative animate-in zoom-in-95 duration-200 max-h-[90dvh] overflow-y-auto">
             <button
               onClick={() => setIsAddExpenseModalOpen(false)}
               className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-650"

@@ -6,6 +6,8 @@ import TenantOwnerConnection from '../models/TenantOwnerConnection.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 interface IMockReview {
   rating: number;
   feedback: string;
@@ -133,7 +135,7 @@ export const verifyAadhaar = async (req: AuthenticatedRequest, res: Response, ne
     if (trimmedAadhaar) dbConditions.push({ aadhaarNumber: trimmedAadhaar });
     if (trimmedPan) dbConditions.push({ panNumber: trimmedPan });
     if (trimmedPhone) dbConditions.push({ phone: trimmedPhone });
-    if (trimmedName) dbConditions.push({ fullName: { $regex: new RegExp(trimmedName, 'i') } });
+    if (trimmedName) dbConditions.push({ fullName: { $regex: new RegExp(escapeRegex(trimmedName), 'i') } });
 
     let existingTenant = null;
     if (dbConditions.length > 0) {
@@ -255,7 +257,8 @@ export const verifyAadhaar = async (req: AuthenticatedRequest, res: Response, ne
     });
 
     // Update matching tenant ratings & verificationStatus if they exist in the DB
-    await Tenant.updateMany(
+    if (derivedAadhaar && derivedAadhaar !== '000000000000') {
+      await Tenant.updateMany(
       { aadhaarNumber: derivedAadhaar },
       {
         $set: {
@@ -266,7 +269,8 @@ export const verifyAadhaar = async (req: AuthenticatedRequest, res: Response, ne
           previousOwnerFeedback: result.feedback
         }
       }
-    );
+      );
+    }
 
     // Fetch prefill details if a tenant profile exists in DB
     const latestTenant = await Tenant.findOne({

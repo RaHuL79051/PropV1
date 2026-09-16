@@ -4,7 +4,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import { rateLimit } from 'express-rate-limit';
-import { errorHandler } from './middleware/errorHandler.js';
+import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 
 // Route imports
 import authRoutes from './routes/auth.routes.js';
@@ -27,9 +27,26 @@ app.use(cookieParser());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
-// Request logging middleware for debugging
+// Request logging middleware for debugging. Credentials and large base64
+// document payloads are never written to the logs.
+const SENSITIVE_FIELDS = ['password', 'newPassword', 'passwordHash', 'token', 'refreshToken'];
+const summariseBody = (body: any): any => {
+  if (!body || typeof body !== 'object') return body;
+  const safe: Record<string, any> = {};
+  for (const [key, value] of Object.entries(body)) {
+    if (SENSITIVE_FIELDS.includes(key)) {
+      safe[key] = '[redacted]';
+    } else if (typeof value === 'string' && value.length > 256) {
+      safe[key] = `[${value.length} chars omitted]`;
+    } else {
+      safe[key] = value;
+    }
+  }
+  return safe;
+};
+
 app.use((req, res, next) => {
-  console.log(`[Request] ${req.method} ${req.url} - Body:`, req.body);
+  console.log(`[Request] ${req.method} ${req.url} - Body:`, summariseBody(req.body));
   next();
 });
 
@@ -53,7 +70,12 @@ app.use(
   cors({
     origin: (origin, callback) => {
       // Allow requests with no origin (mobile apps, curl, server-to-server)
-      if (!origin || allowedOrigins.includes(origin)) {
+      // or matching allowed origins, or any ngrok tunnel domain
+      if (
+        !origin ||
+        allowedOrigins.includes(origin) ||
+        origin.includes('ngrok')
+      ) {
         callback(null, true);
         return;
       }
@@ -63,7 +85,7 @@ app.use(
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization', 'ngrok-skip-browser-warning']
   })
 );
 
@@ -73,7 +95,10 @@ const limiter = rateLimit({
   max: process.env.NODE_ENV === 'production' ? 200 : 10000, // limit each IP to 200 requests in production, but allow 10000 in development
   standardHeaders: true,
   legacyHeaders: false,
-  message: 'Too many requests from this IP, please try again after 15 minutes'
+  message: {
+    status: 'error',
+    message: 'Too many requests from this device. Please try again in about 15 minutes.'
+  }
 });
 app.use('/api/', limiter);
 
@@ -94,7 +119,8 @@ app.get('/health', (req, res) => {
   res.status(200).json({ status: 'OK', timestamp: new Date() });
 });
 
-// Global Error Handler
+// Unknown routes answer in JSON, then the global error handler formats everything else.
+app.use(notFoundHandler);
 app.use(errorHandler);
 
 export default app;

@@ -24,19 +24,24 @@ export const createProperty = async (req: AuthenticatedRequest, res: Response, n
           state: address?.state || ''
         };
 
+    const requestedRooms = Number(totalRooms) || 0;
+    if (requestedRooms < 0 || requestedRooms > 200) {
+      throw new AppError('Total rooms must be between 0 and 200', 400);
+    }
+
     const property = await Property.create({
       propertyName,
       address: structuredAddress,
       description,
       images: images || ['https://images.unsplash.com/photo-1564013799919-ab600027ffc6?auto=format&fit=crop&w=800&q=80'],
-      totalRooms,
+      totalRooms: requestedRooms,
       owner: ownerId
     });
 
     // Create default rooms
     const createdRooms = [];
     const capacity = roomType === 'flat' ? 4 : 2;
-    for (let i = 1; i <= totalRooms; i++) {
+    for (let i = 1; i <= requestedRooms; i++) {
       const room = await Room.create({
         property: property._id,
         roomNumber: `Room-${100 + i}`,
@@ -90,7 +95,7 @@ export const getPropertyById = async (req: AuthenticatedRequest, res: Response, 
     }
 
     if (req.user?.role !== 'admin' && property.owner.toString() !== req.user?.userId) {
-      throw new AppError('Unauthorized access to this property', 403);
+      throw new AppError('You do not have access to this property.', 403);
     }
 
     const rooms = await Room.find({ property: property._id });
@@ -120,7 +125,7 @@ export const updateProperty = async (req: AuthenticatedRequest, res: Response, n
     }
 
     if (req.user?.role !== 'admin' && property.owner.toString() !== req.user?.userId) {
-      throw new AppError('Unauthorized update attempt', 403);
+      throw new AppError('You can only update your own properties.', 403);
     }
 
     property.propertyName = propertyName || property.propertyName;
@@ -139,11 +144,10 @@ export const updateProperty = async (req: AuthenticatedRequest, res: Response, n
         } as any;
       }
     }
-    property.description = description || property.description;
+    property.description = description !== undefined ? description : property.description;
     property.images = images || property.images;
-    if (totalRooms !== undefined) {
-      property.totalRooms = totalRooms;
-    }
+    // totalRooms is derived from the rooms collection, never set directly.
+    property.totalRooms = await Room.countDocuments({ property: property._id });
 
     await property.save();
     return res.status(200).json({ message: 'Property updated successfully', property });
@@ -162,7 +166,7 @@ export const deleteProperty = async (req: AuthenticatedRequest, res: Response, n
     }
 
     if (req.user?.role !== 'admin' && property.owner.toString() !== req.user?.userId) {
-      throw new AppError('Unauthorized delete attempt', 403);
+      throw new AppError('You can only delete your own properties.', 403);
     }
 
     // Clean up rooms, beds, and unassign tenants
@@ -198,7 +202,7 @@ export const addRoom = async (req: AuthenticatedRequest, res: Response, next: Ne
     }
 
     if (req.user?.role !== 'admin' && property.owner.toString() !== req.user?.userId) {
-      throw new AppError('Unauthorized', 403);
+      throw new AppError('You can only add rooms to your own properties.', 403);
     }
 
     const actualCapacity = bedCapacity;
@@ -230,8 +234,8 @@ export const addRoom = async (req: AuthenticatedRequest, res: Response, next: Ne
       beds.push(bed);
     }
 
-    // Update total rooms count
-    property.totalRooms = property.totalRooms + 1;
+    // Keep the stored count in step with the rooms that actually exist.
+    property.totalRooms = await Room.countDocuments({ property: property._id });
     await property.save();
 
     return res.status(201).json({ room, beds });
@@ -253,12 +257,24 @@ export const updateRoom = async (req: AuthenticatedRequest, res: Response, next:
     // Validate ownership
     const property = await Property.findById(room.property);
     if (!property || (req.user?.role !== 'admin' && property.owner.toString() !== req.user?.userId)) {
-      throw new AppError('Unauthorized', 403);
+      throw new AppError('You can only edit rooms in your own properties.', 403);
     }
 
     // Check unpaid person limits if uploading document
     if (agreementDocData !== undefined && req.user?.role !== 'admin' && property.owner) {
       await checkUnpaidPersonsLimit(property.owner.toString());
+    }
+
+    if (typeof agreementDocData === 'string' && agreementDocData.length > 4 * 1024 * 1024) {
+      throw new AppError('Agreement document is too large. Please upload a file under 3MB.', 413);
+    }
+
+    if (monthlyRent !== undefined && (isNaN(Number(monthlyRent)) || Number(monthlyRent) < 0)) {
+      throw new AppError('Monthly rent must be a non-negative number', 400);
+    }
+
+    if (bedCapacity !== undefined && (!Number.isInteger(Number(bedCapacity)) || Number(bedCapacity) < 1)) {
+      throw new AppError('Bed capacity must be a whole number of at least 1', 400);
     }
 
     room.roomNumber = roomNumber || room.roomNumber;
@@ -286,7 +302,7 @@ export const updateRoom = async (req: AuthenticatedRequest, res: Response, next:
         // Check if removing beds would dislodge occupied beds
         const occupiedBedsCount = currentBeds.filter(b => b.isOccupied).length;
         if (occupiedBedsCount > bedCapacity) {
-          throw new AppError('Cannot reduce bed capacity below the number of currently occupied beds', 400);
+          throw new AppError(`Bed capacity cannot be reduced below ${occupiedBedsCount}, the number of beds currently occupied.`, 409);
         }
 
         // Delete unoccupied beds
@@ -321,19 +337,23 @@ export const deleteRoom = async (req: AuthenticatedRequest, res: Response, next:
 
     const property = await Property.findById(room.property);
     if (!property || (req.user?.role !== 'admin' && property.owner.toString() !== req.user?.userId)) {
-      throw new AppError('Unauthorized', 403);
+      throw new AppError('You can only delete rooms in your own properties.', 403);
     }
 
     // Check if any beds are occupied
     const occupiedBeds = await Bed.find({ room: room._id, isOccupied: true });
     if (occupiedBeds.length > 0) {
-      throw new AppError('Cannot delete a room that has active tenants', 400);
+      throw new AppError(
+        `This room still has ${occupiedBeds.length} occupied bed${occupiedBeds.length > 1 ? 's' : ''}. ` +
+          'Move or check out those tenants before deleting it.',
+        409
+      );
     }
 
     await Bed.deleteMany({ room: room._id });
     await Room.findByIdAndDelete(roomId);
 
-    property.totalRooms = Math.max(0, property.totalRooms - 1);
+    property.totalRooms = await Room.countDocuments({ property: property._id });
     await property.save();
 
     return res.status(200).json({ message: 'Room deleted successfully' });

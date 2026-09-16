@@ -6,11 +6,12 @@ import api from '../../../../lib/api';
 import { useToastStore } from '../../../../store/toastStore';
 import {
   Building, Plus, Trash2, MapPin, Loader2, X, AlertTriangle,
-  ChevronDown, ChevronRight, Pencil, Check, BedDouble, IndianRupee,
+  ChevronDown, ChevronRight, Pencil, Check, CheckCircle, BedDouble, IndianRupee,
   Upload, Download, User, Star, FileText,
   ShieldCheck, ShieldAlert, Search, Mail, Send, Calendar, ArrowLeft, Users
 } from 'lucide-react';
 import { Property, Room } from '../../../../types';
+import { getApiErrorMessage } from '../../../../lib/apiError';
 
 interface BillingStatus {
   totalTenants: number;
@@ -160,6 +161,7 @@ export default function PropertiesPage() {
         assignedProperty: assigningContext.propertyId,
         assignedRoom: assigningContext.roomId,
         assignedBed: assigningContext.bedId,
+        joiningDate: assignJoiningDate || null,
         ...(assignCustomRent !== '' && { rentAmount: assignCustomRent })
       });
       showToast('Tenant assigned successfully!', 'success');
@@ -171,7 +173,7 @@ export default function PropertiesPage() {
       }
       fetchBillingStatus();
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to assign tenant', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to assign tenant'), 'error');
     } finally {
       setSubmitting(false);
     }
@@ -252,7 +254,7 @@ export default function PropertiesPage() {
 
       showToast('Tenant verification report retrieved successfully', 'success');
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to retrieve verification report', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to retrieve verification report'), 'error');
     } finally {
       setAssignAadhaarVerifying(false);
     }
@@ -273,7 +275,7 @@ export default function PropertiesPage() {
       }
       fetchBillingStatus();
     } catch (activateErr: any) {
-      showToast(activateErr.response?.data?.message || 'Failed to activate connection', 'error');
+      showToast(getApiErrorMessage(activateErr, 'Failed to activate connection'), 'error');
     } finally {
       setIsReactivating(false);
       setReactivateAadhaar('');
@@ -313,12 +315,7 @@ export default function PropertiesPage() {
       }
       fetchBillingStatus();
     } catch (err: any) {
-      if (err.response?.data?.errors && Array.isArray(err.response.data.errors)) {
-        const details = err.response.data.errors.map((e: any) => `${e.field.replace('body.', '')}: ${e.message}`).join(', ');
-        showToast(`Validation failed: ${details}`, 'error');
-      } else {
-        showToast(err.response?.data?.message || 'Failed to register tenant', 'error');
-      }
+      showToast(getApiErrorMessage(err, 'Failed to register tenant'), 'error');
     } finally {
       setAssignSubmitting(false);
     }
@@ -347,16 +344,32 @@ export default function PropertiesPage() {
       setAssignInviteUrl(res.data.invite.inviteUrl);
       showToast('Invitation link sent successfully', 'success');
     } catch (err: any) {
-      if (err.response?.data?.errors && Array.isArray(err.response.data.errors)) {
-        const details = err.response.data.errors.map((e: any) => `${e.field.replace('body.', '')}: ${e.message}`).join(', ');
-        showToast(`Validation failed: ${details}`, 'error');
-      } else {
-        showToast(err.response?.data?.message || 'Failed to send invitation link', 'error');
-      }
+      showToast(getApiErrorMessage(err, 'Failed to send invitation link'), 'error');
     } finally {
       setAssignInviteSending(false);
     }
   };
+
+  // Mirrors the server's pro-ration: a tenant joining mid-month pays only for
+  // the days they will actually occupy, inclusive of the joining day.
+  const proratedPreview = (() => {
+    if (!assignJoiningDate) return null;
+    const joining = new Date(`${assignJoiningDate}T00:00:00`);
+    if (isNaN(joining.getTime())) return null;
+    const monthlyRent = Number(
+      assignCustomRent !== '' ? assignCustomRent : assigningContext ? (assigningContext as any).monthlyRent || 0 : 0
+    );
+    if (!monthlyRent || monthlyRent <= 0) return null;
+    const daysInMonth = new Date(joining.getFullYear(), joining.getMonth() + 1, 0).getDate();
+    const days = daysInMonth - joining.getDate() + 1;
+    return {
+      from: joining.getDate(),
+      days,
+      daysInMonth,
+      monthName: joining.toLocaleString('en-IN', { month: 'long' }),
+      amount: Math.round((monthlyRent / daysInMonth) * days)
+    };
+  })();
 
   const resetAssignForm = () => {
     setAssignAadhaar('');
@@ -403,7 +416,7 @@ export default function PropertiesPage() {
         setIsAssignModalOpen(true);
       }
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to verify licensing status', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to verify licensing status'), 'error');
     }
   };
 
@@ -468,7 +481,7 @@ export default function PropertiesPage() {
       const res = await api.get('/properties');
       setProperties(res.data);
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to fetch properties', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to fetch properties'), 'error');
     } finally {
       setIsLoading(false);
     }
@@ -599,7 +612,7 @@ export default function PropertiesPage() {
       fetchRoomsForProperty(propId);
       fetchBillingStatus();
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to update room', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to update room'), 'error');
     } finally {
       setSavingRoomId(null);
     }
@@ -629,7 +642,7 @@ export default function PropertiesPage() {
         await fetchRoomsForProperty(selectedProperty._id);
       }
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to adjust rent', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to adjust rent'), 'error');
     } finally {
       setSavingRentTenantId(null);
     }
@@ -697,7 +710,7 @@ export default function PropertiesPage() {
       setDeleteItemId('');
       setDeleteItemExtraId('');
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to perform delete action', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to perform delete action'), 'error');
     } finally {
       setIsDeleting(false);
     }
@@ -711,7 +724,7 @@ export default function PropertiesPage() {
       fetchBillingStatus();
       fetchProperties();
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to delete room', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to delete room'), 'error');
     }
   };
 
@@ -795,7 +808,7 @@ export default function PropertiesPage() {
         setTimeout(() => fetchRoomsForProperty(selectedProperty._id), 200);
       }
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Action failed', 'error');
+      showToast(getApiErrorMessage(err, 'Action failed'), 'error');
     } finally {
       setSubmitting(false);
     }
@@ -832,7 +845,7 @@ export default function PropertiesPage() {
               showToast('Payment verified! Tenant licenses active.', 'success');
               fetchBillingStatus(); fetchProperties();
             } catch (err: any) {
-              showToast(err.response?.data?.message || 'Payment verification failed', 'error');
+              showToast(getApiErrorMessage(err, 'Payment verification failed'), 'error');
             }
           },
           prefill: { name: '', email: '', contact: '' },
@@ -842,7 +855,7 @@ export default function PropertiesPage() {
         rzp.open();
       }
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to initiate payment', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to initiate payment'), 'error');
     } finally {
       setIsPaying(false);
     }
@@ -901,7 +914,7 @@ export default function PropertiesPage() {
       setPropertyName(''); setAddrPincode(''); setAddrFlatNo(''); setAddrArea(''); setAddrLandmark(''); setAddrCity(''); setAddrState(''); setPincodeCities([]); setDescription(''); setTotalRooms(0); setPropertyRoomType('pg');
       fetchProperties(); fetchBillingStatus();
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to create property', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to create property'), 'error');
     } finally {
       setSubmitting(false);
     }
@@ -932,7 +945,7 @@ export default function PropertiesPage() {
         fetchRoomsForProperty(selectedPropertyId);
       }
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to add room', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to add room'), 'error');
     } finally {
       setSubmitting(false);
     }
@@ -944,7 +957,7 @@ export default function PropertiesPage() {
       showToast('Property deleted successfully', 'success');
       fetchProperties(); fetchBillingStatus();
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to delete property', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to delete property'), 'error');
     }
   };
 
@@ -985,7 +998,7 @@ export default function PropertiesPage() {
             fetchRoomsForProperty(selectedProperty._id);
           }
         } catch (err: any) {
-          showToast(err.response?.data?.message || `Failed to upload ${title}`, 'error');
+          showToast(getApiErrorMessage(err, `Failed to upload ${title}`), 'error');
         } finally {
           setUploadingDoc(null);
         }
@@ -1061,7 +1074,7 @@ export default function PropertiesPage() {
       {/* 1. PROPERTIES VIEW */}
       {currentView === 'properties' && (
         <>
-          <div className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-primary via-indigo-600 to-blue-700 text-white shadow-xl">
+          <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white shadow-xl">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.15),transparent_50%)]" />
             <div className="absolute -bottom-8 -right-8 w-32 h-32 rounded-full bg-white/5 blur-2xl" />
             <div className="relative p-5 md:p-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -1094,43 +1107,45 @@ export default function PropertiesPage() {
 
           {/* Summary Stats */}
           {properties.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-              <div className="p-4 sm:p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm card-hover flex items-center justify-between gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm card-hover flex items-center justify-between gap-4">
                 <div>
-                  <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Properties</p>
-                  <h3 className="text-2xl font-black text-slate-900 dark:text-white mt-1">{properties.length}</h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Registered listings</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Total Properties</p>
+                  <h3 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white mt-1">{properties.length}</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Registered listings</p>
                 </div>
-                <div className="p-2.5 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 text-primary shadow-sm">
-                  <Building className="w-5 h-5" />
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 text-primary flex items-center justify-center shadow-sm border border-primary/20 shrink-0">
+                  <Building className="w-6 h-6" />
                 </div>
               </div>
-              <div className="p-4 sm:p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm card-hover flex items-center justify-between gap-3">
+
+              <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm card-hover flex items-center justify-between gap-4">
                 <div>
-                  <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Rooms</p>
-                  <h3 className="text-2xl font-black text-slate-900 dark:text-white mt-1">{properties.reduce((sum, p) => sum + (p.totalRooms || 0), 0)}</h3>
-                  <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">Across all properties</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Total Rooms</p>
+                  <h3 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white mt-1">{properties.reduce((sum, p) => sum + (p.totalRooms || 0), 0)}</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 truncate">Across all properties</p>
                 </div>
-                <div className="p-2.5 rounded-xl bg-gradient-to-br from-amber-500/20 to-amber-500/5 text-amber-600 shadow-sm">
-                  <BedDouble className="w-5 h-5" />
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500/20 to-amber-500/5 text-amber-600 flex items-center justify-center shadow-sm border border-amber-500/20 shrink-0">
+                  <BedDouble className="w-6 h-6" />
                 </div>
               </div>
-              <div className="p-4 sm:p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm card-hover flex items-center justify-between gap-3">
+
+              <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm card-hover flex items-center justify-between gap-4">
                 <div>
-                  <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-400">Bed Licensing</p>
-                  <h3 className={`text-xl sm:text-2xl font-black mt-0.5 ${billingStatus && billingStatus.unpaidPersons > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Bed Licensing</p>
+                  <h3 className={`text-2xl sm:text-3xl font-black mt-1 ${billingStatus && billingStatus.unpaidPersons > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
                     {billingStatus ? `${billingStatus.paidPersons}/${billingStatus.totalTenants}` : '...'}
                   </h3>
-                  <p className={`text-xs mt-0.5 ${billingStatus && billingStatus.unpaidPersons > 0 ? 'text-amber-500' : 'text-emerald-500'}`}>
+                  <p className={`text-xs font-semibold mt-1 ${billingStatus && billingStatus.unpaidPersons > 0 ? 'text-amber-500' : 'text-emerald-500'}`}>
                     {billingStatus && billingStatus.unpaidPersons > 0 ? `${billingStatus.unpaidPersons} unpaid` : 'All active'}
                   </p>
                 </div>
-                <div className={`p-3 rounded-xl bg-gradient-to-br shadow-sm ${
+                <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br flex items-center justify-center shadow-sm border shrink-0 ${
                   billingStatus && billingStatus.unpaidPersons > 0 
-                    ? 'from-amber-500/20 to-amber-500/5 text-amber-600' 
-                    : 'from-emerald-500/20 to-emerald-500/5 text-emerald-600'
+                    ? 'from-amber-500/20 to-amber-500/5 text-amber-600 border-amber-500/20' 
+                    : 'from-emerald-500/20 to-emerald-500/5 text-emerald-600 border-emerald-500/20'
                 }`}>
-                  <Users className="w-5 h-5" />
+                  <Users className="w-6 h-6" />
                 </div>
               </div>
             </div>
@@ -1138,33 +1153,35 @@ export default function PropertiesPage() {
 
           {/* Tenant Licensing Banner */}
           {billingStatus && (
-            <div className="p-6 rounded-2xl bg-slate-900 text-white border border-slate-800 shadow-xl relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-6 card-hover">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full blur-3xl -z-10" />
-              <div className="space-y-1">
-                <h3 className="text-lg font-bold tracking-tight flex items-center gap-2">
-                  <span className="p-1 rounded bg-primary/20 text-primary">💳</span> Tenant Licensing & Portal Access
+            <div className="p-6 rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white border border-indigo-500/20 shadow-xl relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-6 card-hover">
+              <div className="absolute -top-12 -right-12 w-64 h-64 bg-primary/20 rounded-full blur-3xl pointer-events-none" />
+              <div className="space-y-1.5 relative z-10">
+                <h3 className="text-lg font-extrabold tracking-tight flex items-center gap-2">
+                  <span className="p-1.5 rounded-lg bg-primary/20 text-cyan-300 border border-primary/30">💳</span> Tenant Licensing & Portal Access
                 </h3>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-slate-300 leading-relaxed">
                   Licensing fee: <span className="text-white font-extrabold font-sans">₹20/person</span> (First 2 free). Paid for{' '}
                   <span className="text-emerald-400 font-extrabold font-sans">{billingStatus.paidPersons} tenants</span> of{' '}
                   <span className="text-slate-200 font-extrabold font-sans">{billingStatus.totalTenants} total tenants</span>.
                 </p>
                 {billingStatus.unpaidPersons > 0 ? (
                   <p className="text-xs text-amber-400 font-semibold flex items-center gap-1.5">
-                    <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
                     {billingStatus.unpaidPersons} unpaid tenants. Tenant profile views, room assignments, and document uploads locked until payment.
                   </p>
                 ) : (
-                  <p className="text-xs text-emerald-400 font-semibold">✓ All tenant licenses active and verified.</p>
+                  <p className="text-xs text-emerald-400 font-semibold flex items-center gap-1">
+                    <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" /> All tenant licenses active and verified.
+                  </p>
                 )}
               </div>
               {billingStatus.unpaidPersons > 0 && (
                 <button
                   onClick={handlePayment}
                   disabled={isPaying}
-                  className="px-6 py-3 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-extrabold shadow-lg shadow-primary/20 transition-all hover:scale-105 disabled:opacity-50 flex items-center gap-2"
+                  className="px-6 py-3 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-extrabold shadow-lg shadow-primary/30 transition-all hover:scale-105 disabled:opacity-50 flex items-center justify-center gap-2 shrink-0"
                 >
-                  {isPaying ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Processing...</> : <>Pay ₹{billingStatus.amountDue} Now</>}
+                  {isPaying ? <><Loader2 className="w-4 h-4 animate-spin" />Processing...</> : <>Pay ₹{billingStatus.amountDue} Now</>}
                 </button>
               )}
             </div>
@@ -1200,15 +1217,15 @@ export default function PropertiesPage() {
             return (
               <>
                 {/* Desktop View */}
-                <div className="hidden md:block bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden card-hover">
-                  <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 font-sans">
-                    <table className="w-max min-w-full text-left border-collapse">
-                      <thead className="bg-[#F1F5F9] dark:bg-slate-950 font-semibold text-xs text-slate-550 uppercase tracking-wider border-b border-slate-200 dark:border-slate-800">
+                <div className="hidden md:block bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden card-hover">
+                  <div className="overflow-x-auto font-sans">
+                    <table className="w-full text-left border-collapse">
+                      <thead className="bg-slate-50 dark:bg-slate-950 font-extrabold text-[11px] text-slate-600 dark:text-slate-400 uppercase tracking-wider border-b border-slate-200 dark:border-slate-800">
                         <tr>
-                          <th className="py-3 px-4 w-20">S NO</th>
-                          <th className="py-3 px-4">Property Name</th>
-                          <th className="py-3 px-4 w-40">Status</th>
-                          <th className="py-3 px-4 w-48 text-right">Action</th>
+                          <th className="py-4 px-6 w-20">S NO</th>
+                          <th className="py-4 px-6">Property Name</th>
+                          <th className="py-4 px-6 w-40">Status</th>
+                          <th className="py-4 px-6 w-48 text-right">Action</th>
                         </tr>
                       </thead>
                       <tbody className="text-sm divide-y divide-slate-100 dark:divide-slate-850">
@@ -1247,17 +1264,17 @@ export default function PropertiesPage() {
                                       e.stopPropagation();
                                       handleViewRooms(prop);
                                     }}
-                                    className="group inline-flex items-center gap-1 text-xs font-bold text-primary hover:bg-primary/10 px-3 py-1.5 rounded-lg transition-all"
+                                    className="group inline-flex items-center gap-1.5 text-xs font-extrabold text-primary bg-primary/10 hover:bg-primary hover:text-white px-3.5 py-1.5 rounded-xl transition-all shadow-sm"
                                   >
                                     View Rooms
-                                    <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform duration-300" />
+                                    <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
                                   </button>
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       triggerDeleteProperty(prop._id);
                                     }}
-                                    className="p-1.5 border border-slate-200 dark:border-slate-800 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-lg transition-all"
+                                    className="p-1.5 border border-slate-200 dark:border-slate-800 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-xl transition-all"
                                     title="Delete Property"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
@@ -1284,40 +1301,40 @@ export default function PropertiesPage() {
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                              <Building className="w-4 h-4" />
+                            <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0 font-bold border border-primary/20">
+                              <Building className="w-5 h-5" />
                             </div>
                             <div>
-                              <span className="font-bold text-slate-900 dark:text-white block">{prop.propertyName}</span>
+                              <span className="font-extrabold text-slate-900 dark:text-white block text-sm">{prop.propertyName}</span>
                               <span className="text-xs text-slate-400 block">{prop.fullAddress || ''}</span>
                             </div>
                           </div>
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] uppercase font-bold tracking-wider ${status === 'Active'
-                            ? 'bg-emerald-500/10 text-emerald-600'
-                            : 'bg-amber-500/10 text-amber-600'
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-[10px] uppercase font-extrabold tracking-wider ${status === 'Active'
+                            ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
+                            : 'bg-amber-500/10 text-amber-600 border border-amber-500/20'
                             }`}>
                             {status}
                           </span>
                         </div>
-                        <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
-                          <span className="text-xs font-mono text-slate-400">S.No: {(idx + 1).toString().padStart(2, '0')}</span>
-                          <div className="flex gap-2">
+                        <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800">
+                          <span className="text-xs font-mono font-bold text-slate-400">S.No: {(idx + 1).toString().padStart(2, '0')}</span>
+                          <div className="flex items-center gap-2">
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleViewRooms(prop);
                               }}
-                              className="group inline-flex items-center gap-1 text-xs font-bold text-primary hover:bg-primary/10 px-2.5 py-1 rounded-lg transition-all"
+                              className="group inline-flex items-center gap-1.5 text-xs font-extrabold text-primary bg-primary/10 hover:bg-primary hover:text-white px-3 py-1.5 rounded-xl transition-all shadow-sm"
                             >
                               View Rooms
-                              <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform duration-300" />
+                              <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
                             </button>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 triggerDeleteProperty(prop._id);
                               }}
-                              className="p-1.5 border border-slate-200 dark:border-slate-800 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-lg transition-all"
+                              className="p-1.5 border border-slate-200 dark:border-slate-800 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-xl transition-all"
                               title="Delete Property"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -1370,7 +1387,7 @@ export default function PropertiesPage() {
                 <span className="text-slate-850 dark:text-slate-200">Rooms</span>
               </nav>
 
-              <div className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-indigo-600 via-primary to-blue-600 text-white shadow-xl">
+              <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white shadow-xl">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.15),transparent_50%)]" />
                 <div className="absolute -bottom-8 -right-8 w-32 h-32 rounded-full bg-white/5 blur-2xl" />
                 <div className="relative p-5 md:p-7 flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4">
@@ -1491,6 +1508,7 @@ export default function PropertiesPage() {
                             <th className="py-3 px-4 w-16">S.No</th>
                             <th className="py-3 px-4">Room Number</th>
                             <th className="py-3 px-4">Occupancy Status</th>
+                            <th className="py-3 px-4 text-right">Monthly Rent</th>
                             <th className="py-3 px-4 text-right">Occupants / Capacity</th>
                             <th className="py-3 px-4 text-center w-64">Action</th>
                           </tr>
@@ -1527,6 +1545,15 @@ export default function PropertiesPage() {
                                       : 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 border border-emerald-200/50'
                                     }`}>
                                     {room.occupancyStatus.replace('_', ' ')}
+                                  </span>
+                                </td>
+                                <td className="py-4 px-4 text-right">
+                                  <span className="font-bold text-slate-900 dark:text-white inline-flex items-center justify-end">
+                                    <IndianRupee className="w-3.5 h-3.5" />
+                                    {Number(room.monthlyRent || 0).toLocaleString('en-IN')}
+                                  </span>
+                                  <span className="block text-[10px] text-slate-450">
+                                    {isFlat ? 'whole flat' : 'per bed'}
                                   </span>
                                 </td>
                                 <td className="py-4 px-4 text-right font-mono text-slate-700 dark:text-slate-300">
@@ -1629,6 +1656,16 @@ export default function PropertiesPage() {
                                   : 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 border border-emerald-250/50'
                                 }`}>
                                 {room.occupancyStatus.replace('_', ' ')}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-slate-500">
+                                {room.roomType === 'flat' ? 'Monthly Rent (whole flat):' : 'Monthly Rent (per bed):'}
+                              </span>
+                              <span className="font-bold text-slate-900 dark:text-white inline-flex items-center">
+                                <IndianRupee className="w-3 h-3" />
+                                {Number(room.monthlyRent || 0).toLocaleString('en-IN')}
                               </span>
                             </div>
 
@@ -1749,7 +1786,7 @@ export default function PropertiesPage() {
                 <span className="text-slate-850 dark:text-slate-200">Linked Users</span>
               </nav>
 
-              <div className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-600 text-white shadow-xl">
+              <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white shadow-xl">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.15),transparent_50%)]" />
                 <div className="absolute -bottom-8 -right-8 w-32 h-32 rounded-full bg-white/5 blur-2xl" />
                 <div className="relative p-5 md:p-7 flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4">
@@ -1881,7 +1918,7 @@ export default function PropertiesPage() {
                                 }));
                                 fetchRoomsForProperty(selectedProperty._id);
                               } catch (err: any) {
-                                showToast(err.response?.data?.message || 'Failed to upload lease agreement', 'error');
+                                showToast(getApiErrorMessage(err, 'Failed to upload lease agreement'), 'error');
                               }
                             };
                             reader.readAsDataURL(file);
@@ -1914,7 +1951,7 @@ export default function PropertiesPage() {
                               }));
                               fetchRoomsForProperty(selectedProperty._id);
                             } catch (err: any) {
-                              showToast(err.response?.data?.message || 'Failed to upload lease agreement', 'error');
+                              showToast(getApiErrorMessage(err, 'Failed to upload lease agreement'), 'error');
                             }
                           };
                           reader.readAsDataURL(file);
@@ -2263,7 +2300,7 @@ export default function PropertiesPage() {
       {/* Add Property Modal */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative max-h-[90vh] overflow-y-auto">
+          <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative max-h-[90dvh] overflow-y-auto">
             <button onClick={() => setIsAddModalOpen(false)} className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
               <X className="w-5 h-5" />
             </button>
@@ -2351,7 +2388,7 @@ export default function PropertiesPage() {
       {/* Add Room Modal */}
       {isAddRoomModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative max-h-[90vh] overflow-y-auto">
+          <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative max-h-[90dvh] overflow-y-auto">
             <button onClick={() => setIsAddRoomModalOpen(false)} className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
               <X className="w-5 h-5" />
             </button>
@@ -2552,7 +2589,7 @@ export default function PropertiesPage() {
                         }
                         showToast('Tenant verified successfully!', 'success');
                       } catch (err: any) {
-                        showToast(err.response?.data?.message || 'Failed to verify tenant', 'error');
+                        showToast(getApiErrorMessage(err, 'Failed to verify tenant'), 'error');
                       }
                     }}
                     className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md transition-all flex items-center justify-center gap-1"
@@ -2647,7 +2684,7 @@ export default function PropertiesPage() {
       {/* ── Assign Tenant Modal ── */}
       {isAssignModalOpen && assigningContext && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200 text-slate-900 dark:text-white">
+          <div className="w-full max-w-xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative max-h-[90dvh] overflow-y-auto animate-in zoom-in-95 duration-200 text-slate-900 dark:text-white">
             <button
               onClick={() => {
                 setIsAssignModalOpen(false);
@@ -2690,6 +2727,27 @@ export default function PropertiesPage() {
                       </option>
                     ))}
                   </select>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold mb-1.5 uppercase text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                  <Calendar className="w-3.5 h-3.5" /> Move-in Date
+                </label>
+                <input
+                  type="date"
+                  value={assignJoiningDate}
+                  onChange={(e) => setAssignJoiningDate(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary"
+                  required
+                />
+                {proratedPreview && (
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed">
+                    First invoice covers <span className="font-bold">{proratedPreview.from}&ndash;{proratedPreview.daysInMonth} {proratedPreview.monthName}</span>{' '}
+                    ({proratedPreview.days} of {proratedPreview.daysInMonth} days):{' '}
+                    <span className="font-bold text-slate-700 dark:text-slate-200">&#8377;{proratedPreview.amount.toLocaleString('en-IN')}</span>.
+                    Full rent resumes from the 1st of next month.
+                  </p>
                 )}
               </div>
 
@@ -2742,7 +2800,7 @@ export default function PropertiesPage() {
 
       {isLicensingModalOpen && canAssignDetails && assigningContext && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative text-slate-900 dark:text-white">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative text-slate-900 dark:text-white max-h-[90dvh] overflow-y-auto">
             <button
               onClick={() => {
                 setIsLicensingModalOpen(false);
@@ -2828,7 +2886,7 @@ export default function PropertiesPage() {
                           await fetchUnassignedTenants();
                           setIsAssignModalOpen(true);
                         } catch (err: any) {
-                          showToast(err.response?.data?.message || 'Payment verification failed', 'error');
+                          showToast(getApiErrorMessage(err, 'Payment verification failed'), 'error');
                         }
                       },
                       prefill: { name: '', email: '', contact: '' },
@@ -2838,7 +2896,7 @@ export default function PropertiesPage() {
                     rzp.open();
                   }
                 } catch (err: any) {
-                  showToast(err.response?.data?.message || 'Failed to initiate payment', 'error');
+                  showToast(getApiErrorMessage(err, 'Failed to initiate payment'), 'error');
                 } finally {
                   setIsPaying(false);
                 }
@@ -2873,7 +2931,7 @@ export default function PropertiesPage() {
               </button>
             </div>
 
-            <div className="p-5 overflow-y-auto max-h-[80vh] space-y-5">
+            <div className="p-5 overflow-y-auto max-h-[80dvh] space-y-5">
               <p className="text-sm text-slate-600 dark:text-slate-400">
                 Choose an action for tenant <span className="font-bold text-slate-900 dark:text-white">{tenantToUnassign.fullName}</span>.
               </p>
@@ -3144,7 +3202,7 @@ export default function PropertiesPage() {
       {/* ── Edit Room Modal ── */}
       {isRoomEditModalOpen && editingRoom && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative text-slate-900 dark:text-white max-h-[90vh] overflow-y-auto">
+          <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative text-slate-900 dark:text-white max-h-[90dvh] overflow-y-auto">
             <button
               onClick={handleCloseRoomEdit}
               className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
@@ -3286,7 +3344,7 @@ export default function PropertiesPage() {
       {/* ── Edit Tenant Rent Modal ── */}
       {isTenantRentModalOpen && editingRentTenant && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative text-slate-900 dark:text-white">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative text-slate-900 dark:text-white max-h-[90dvh] overflow-y-auto">
             <button
               onClick={handleCloseTenantRentEdit}
               className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"

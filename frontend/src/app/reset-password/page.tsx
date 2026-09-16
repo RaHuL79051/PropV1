@@ -6,6 +6,7 @@ import api from '../../lib/api';
 import { useToastStore } from '../../store/toastStore';
 import { Building2, Lock, Loader2, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
+import { getApiErrorMessage } from '../../lib/apiError';
 
 function ResetPasswordForm() {
   const router = useRouter();
@@ -35,7 +36,7 @@ function ResetPasswordForm() {
       showToast('Password reset successful! Sign in now.', 'success');
       router.push('/login');
     } catch (err: any) {
-      const errMsg = err.response?.data?.message || 'Password reset failed. Token might be expired.';
+      const errMsg = getApiErrorMessage(err, 'Password reset failed. Token might be expired.');
       showToast(errMsg, 'error');
     } finally {
       setIsLoading(false);

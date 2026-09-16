@@ -3,6 +3,24 @@ import bcrypt from 'bcrypt';
 import User from '../models/User.js';
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '../utils/jwt.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { sendMail } from '../utils/mailer.js';
+
+// Browsers drop a SameSite=None cookie that is not also Secure, which silently
+// breaks refresh-token rotation over plain http during local development.
+const buildRefreshCookieOptions = () => {
+  const isProduction = process.env.NODE_ENV === 'production';
+  return {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: (isProduction ? 'none' : 'lax') as 'none' | 'lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+  };
+};
+
+const getFrontendUrl = (req?: Request) => {
+  const requestOrigin = req?.headers.origin?.toString().replace(/\/+$/, '');
+  return requestOrigin || process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3000';
+};
 
 export const register = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -10,7 +28,7 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
 
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      throw new AppError('User with this email already exists', 400);
+      throw new AppError('An account with this email address already exists. Try logging in instead.', 409);
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
@@ -76,12 +94,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
     const accessToken = generateAccessToken(payload);
     const refreshToken = generateRefreshToken(payload);
 
-    res.cookie('refreshToken', refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'none' as const,
-      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
-    });
+    res.cookie('refreshToken', refreshToken, buildRefreshCookieOptions());
 
     return res.status(200).json({
       message: 'Login successful',
@@ -120,12 +133,7 @@ export const refreshToken = async (req: Request, res: Response, next: NextFuncti
     const accessToken = generateAccessToken(payload);
     const newRefreshToken = generateRefreshToken(payload);
 
-    res.cookie('refreshToken', newRefreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'none' as const,
-      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
-    });
+    res.cookie('refreshToken', newRefreshToken, buildRefreshCookieOptions());
 
     return res.status(200).json({
       accessToken,
@@ -145,16 +153,41 @@ export const forgotPassword = async (req: Request, res: Response, next: NextFunc
   try {
     const { email } = req.body;
     const user = await User.findOne({ email });
+
+    // Always answer the same way: revealing whether an address is registered
+    // lets an attacker enumerate accounts.
+    const genericResponse = {
+      message: 'If an account exists for that email address, password reset instructions have been sent to it.'
+    };
+
     if (!user) {
-      throw new AppError('User with this email does not exist', 404);
+      return res.status(200).json(genericResponse);
     }
 
-    // Simulated Reset Link (in production, send email)
     const resetToken = jwtSignForReset((user._id as any).toString());
-    return res.status(200).json({
-      message: 'Password reset instructions sent to your email.',
-      resetToken // Returned for easy simulation
-    });
+    const resetUrl = `${getFrontendUrl(req)}/reset-password?token=${resetToken}`;
+
+    try {
+      await sendMail({
+        to: user.email,
+        subject: 'Reset your Property Manager password',
+        text:
+          `Hello ${user.fullName},\n\n` +
+          `We received a request to reset your password. Open the link below within one hour to choose a new one:\n\n` +
+          `${resetUrl}\n\n` +
+          `If you did not request this, you can safely ignore this email.`,
+        html:
+          `<p>Hello ${user.fullName},</p>` +
+          `<p>We received a request to reset your password. The link below is valid for one hour:</p>` +
+          `<p><a href="${resetUrl}">Reset my password</a></p>` +
+          `<p>If you did not request this, you can safely ignore this email.</p>`
+      });
+    } catch (mailError) {
+      console.error('[Auth] Failed to send password reset email:', mailError);
+    }
+
+    // The token is delivered by email only; it is never returned to the caller.
+    return res.status(200).json(genericResponse);
   } catch (error) {
     next(error);
   }
@@ -163,7 +196,14 @@ export const forgotPassword = async (req: Request, res: Response, next: NextFunc
 export const resetPassword = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { token, newPassword } = req.body;
-    const decoded = jwtVerifyReset(token);
+
+    let decoded: { userId: string };
+    try {
+      decoded = jwtVerifyReset(token);
+    } catch {
+      throw new AppError('This password reset link is invalid or has expired.', 400);
+    }
+
     const user = await User.findById(decoded.userId);
     if (!user) {
       throw new AppError('Invalid reset token or user not found', 404);
@@ -179,7 +219,9 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
 };
 
 export const logout = async (req: Request, res: Response, next: NextFunction) => {
-  res.clearCookie('refreshToken');
+  // Clearing must use the same flags the cookie was written with.
+  const { maxAge, ...clearOptions } = buildRefreshCookieOptions();
+  res.clearCookie('refreshToken', clearOptions);
   return res.status(200).json({ message: 'Logged out successfully' });
 };
 
@@ -252,13 +294,20 @@ export const updateOwnerStatus = async (req: Request, res: Response, next: NextF
   }
 };
 
-// Internal local reset token generator for simplicity
+// Password reset tokens are signed with a dedicated secret, not a hard-coded one.
 import jwt from 'jsonwebtoken';
+const RESET_SECRET =
+  process.env.JWT_RESET_SECRET || process.env.JWT_ACCESS_SECRET || 'fallback_reset_secret_change_me';
+
 const jwtSignForReset = (userId: string) => {
-  return jwt.sign({ userId }, 'reset_secret_key', { expiresIn: '1h' });
+  return jwt.sign({ userId, purpose: 'password_reset' }, RESET_SECRET, { expiresIn: '1h' });
 };
 const jwtVerifyReset = (token: string): { userId: string } => {
-  return jwt.verify(token, 'reset_secret_key') as { userId: string };
+  const decoded = jwt.verify(token, RESET_SECRET) as { userId: string; purpose?: string };
+  if (decoded.purpose !== 'password_reset') {
+    throw new AppError('Invalid password reset token', 400);
+  }
+  return decoded;
 };
 
 export const createUserByAdmin = async (req: any, res: Response, next: NextFunction) => {
@@ -267,7 +316,7 @@ export const createUserByAdmin = async (req: any, res: Response, next: NextFunct
 
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      throw new AppError('User with this email already exists', 400);
+      throw new AppError('An account with this email address already exists.', 409);
     }
 
     const passwordHash = await bcrypt.hash(password, 10);

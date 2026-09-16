@@ -8,6 +8,7 @@ import {
   Calendar, User, Loader2 
 } from 'lucide-react';
 import { VerificationLog } from '../../../../types';
+import { getApiErrorMessage } from '../../../../lib/apiError';
 
 export default function LogsPage() {
   const showToast = useToastStore((state) => state.showToast);
@@ -21,7 +22,7 @@ export default function LogsPage() {
         const res = await api.get('/verification/logs');
         setLogs(res.data);
       } catch (err: any) {
-        showToast(err.response?.data?.message || 'Failed to fetch verification audit trails', 'error');
+        showToast(getApiErrorMessage(err, 'Failed to fetch verification audit trails'), 'error');
       } finally {
         setIsLoading(false);
       }

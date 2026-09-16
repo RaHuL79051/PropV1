@@ -9,6 +9,17 @@ export const createMaintenanceRequest = async (req: AuthenticatedRequest, res: R
   try {
     const { property, room, tenant, title, description, priority } = req.body;
 
+    if (req.user?.role !== 'admin') {
+      const connection = await TenantOwnerConnection.findOne({
+        tenant,
+        owner: req.user?.userId,
+        isDeleted: false
+      });
+      if (!connection) {
+        throw new AppError('You can only raise tickets for tenants linked to your account.', 403);
+      }
+    }
+
     const request = await MaintenanceRequest.create({
       property,
       room,
@@ -64,9 +75,24 @@ export const updateMaintenanceStatus = async (req: AuthenticatedRequest, res: Re
     const { id } = req.params;
     const { status } = req.body; // 'pending' | 'in_progress' | 'resolved'
 
+    if (!['pending', 'in_progress', 'resolved'].includes(status)) {
+      throw new AppError('Invalid ticket status', 400);
+    }
+
     const request = await MaintenanceRequest.findById(id);
     if (!request) {
       throw new AppError('Maintenance ticket not found', 404);
+    }
+
+    if (req.user?.role !== 'admin') {
+      const connection = await TenantOwnerConnection.findOne({
+        tenant: request.tenant,
+        owner: req.user?.userId,
+        isDeleted: false
+      });
+      if (!connection) {
+        throw new AppError('You can only update tickets for tenants linked to your account.', 403);
+      }
     }
 
     request.status = status;
@@ -97,7 +123,7 @@ export const deleteMaintenanceRequest = async (req: AuthenticatedRequest, res: R
         isDeleted: false
       });
       if (!connection) {
-        throw new AppError('Unauthorized to delete this maintenance ticket', 403);
+        throw new AppError('You can only delete tickets for tenants linked to your account.', 403);
       }
     }
 

@@ -10,6 +10,7 @@ import {
   Calendar, ArrowLeft, Users
 } from 'lucide-react';
 import { Property, Room, User as OwnerUser } from '../../../../types';
+import { getApiErrorMessage } from '../../../../lib/apiError';
 
 export default function AdminPropertiesPage() {
   const showToast = useToastStore((state) => state.showToast);
@@ -109,7 +110,7 @@ export default function AdminPropertiesPage() {
         fetchRoomsForProperty(selectedProperty._id);
       }
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to assign tenant', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to assign tenant'), 'error');
     } finally {
       setSubmitting(false);
     }
@@ -157,7 +158,7 @@ export default function AdminPropertiesPage() {
       
       showToast('Aadhaar verification report retrieved successfully', 'success');
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to retrieve Aadhaar verification report', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to retrieve Aadhaar verification report'), 'error');
     } finally {
       setAssignAadhaarVerifying(false);
     }
@@ -177,7 +178,7 @@ export default function AdminPropertiesPage() {
         fetchRoomsForProperty(selectedProperty._id);
       }
     } catch (activateErr: any) {
-      showToast(activateErr.response?.data?.message || 'Failed to activate connection', 'error');
+      showToast(getApiErrorMessage(activateErr, 'Failed to activate connection'), 'error');
     } finally {
       setIsReactivating(false);
       setReactivateAadhaar('');
@@ -218,12 +219,7 @@ export default function AdminPropertiesPage() {
         fetchRoomsForProperty(selectedProperty._id);
       }
     } catch (err: any) {
-      if (err.response?.data?.errors && Array.isArray(err.response.data.errors)) {
-        const details = err.response.data.errors.map((e: any) => `${e.field.replace('body.', '')}: ${e.message}`).join(', ');
-        showToast(`Validation failed: ${details}`, 'error');
-      } else {
-        showToast(err.response?.data?.message || 'Failed to register tenant', 'error');
-      }
+      showToast(getApiErrorMessage(err, 'Failed to register tenant'), 'error');
     } finally {
       setAssignSubmitting(false);
     }
@@ -253,12 +249,7 @@ export default function AdminPropertiesPage() {
       setAssignInviteUrl(res.data.invite.inviteUrl);
       showToast('Invitation link sent successfully', 'success');
     } catch (err: any) {
-      if (err.response?.data?.errors && Array.isArray(err.response.data.errors)) {
-        const details = err.response.data.errors.map((e: any) => `${e.field.replace('body.', '')}: ${e.message}`).join(', ');
-        showToast(`Validation failed: ${details}`, 'error');
-      } else {
-        showToast(err.response?.data?.message || 'Failed to send invitation link', 'error');
-      }
+      showToast(getApiErrorMessage(err, 'Failed to send invitation link'), 'error');
     } finally {
       setAssignInviteSending(false);
     }
@@ -332,7 +323,7 @@ export default function AdminPropertiesPage() {
       const res = await api.get('/properties');
       setProperties(res.data);
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to fetch properties', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to fetch properties'), 'error');
     } finally {
       setIsLoading(false);
     }
@@ -445,7 +436,7 @@ export default function AdminPropertiesPage() {
       setEditingRoomId(null);
       fetchRoomsForProperty(propId);
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to update room', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to update room'), 'error');
     } finally {
       setSavingRoomId(null);
     }
@@ -462,7 +453,7 @@ export default function AdminPropertiesPage() {
         await fetchRoomsForProperty(selectedProperty._id);
       }
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to adjust rent', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to adjust rent'), 'error');
     } finally {
       setSavingRentTenantId(null);
     }
@@ -484,7 +475,7 @@ export default function AdminPropertiesPage() {
       fetchRoomsForProperty(propId);
       fetchProperties();
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to delete room', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to delete room'), 'error');
     }
   };
 
@@ -504,7 +495,7 @@ export default function AdminPropertiesPage() {
         setTimeout(() => fetchRoomsForProperty(selectedProperty._id), 200);
       }
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to unassign tenant', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to unassign tenant'), 'error');
     } finally {
       setSubmitting(false);
       setTenantToUnassign(null);
@@ -532,7 +523,7 @@ export default function AdminPropertiesPage() {
       setPropertyName(''); setAddress(''); setDescription(''); setTotalRooms(1); setPropertyRoomType('pg'); setSelectedOwnerId('');
       fetchProperties();
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to create property', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to create property'), 'error');
     } finally {
       setSubmitting(false);
     }
@@ -557,7 +548,7 @@ export default function AdminPropertiesPage() {
         fetchRoomsForProperty(selectedPropertyId);
       }
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to add room', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to add room'), 'error');
     } finally {
       setSubmitting(false);
     }
@@ -577,7 +568,7 @@ export default function AdminPropertiesPage() {
       showToast('Property deleted successfully', 'success');
       fetchProperties();
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to delete property', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to delete property'), 'error');
     }
   };
 
@@ -604,7 +595,7 @@ export default function AdminPropertiesPage() {
       setDeleteItemId('');
       setDeleteItemExtraId('');
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to perform delete action', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to perform delete action'), 'error');
     } finally {
       setIsDeleting(false);
     }
@@ -647,7 +638,7 @@ export default function AdminPropertiesPage() {
             fetchRoomsForProperty(selectedProperty._id);
           }
         } catch (err: any) {
-          showToast(err.response?.data?.message || `Failed to upload ${title}`, 'error');
+          showToast(getApiErrorMessage(err, `Failed to upload ${title}`), 'error');
         } finally {
           setUploadingDoc(null);
         }
@@ -1198,7 +1189,7 @@ export default function AdminPropertiesPage() {
       {/* ── Add Property Modal ── */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative max-h-[90dvh] overflow-y-auto animate-in zoom-in-95 duration-200">
             <button
               onClick={() => {
                 setIsAddModalOpen(false);
@@ -1309,7 +1300,7 @@ export default function AdminPropertiesPage() {
       {/* ── Add Room Modal ── */}
       {isAddRoomModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative animate-in zoom-in-95 duration-200">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative animate-in zoom-in-95 duration-200 max-h-[90dvh] overflow-y-auto">
             <button
               onClick={() => {
                 setIsAddRoomModalOpen(false);
@@ -1394,7 +1385,7 @@ export default function AdminPropertiesPage() {
       {/* ── Assign Tenant Modal ── */}
       {isAssignModalOpen && assigningContext && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-xl bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative max-h-[95vh] overflow-y-auto animate-in zoom-in-95 duration-200">
+          <div className="w-full max-w-xl bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative max-h-[95dvh] overflow-y-auto animate-in zoom-in-95 duration-200">
             <button
               onClick={() => {
                 setIsAssignModalOpen(false);
@@ -1631,7 +1622,7 @@ export default function AdminPropertiesPage() {
       {/* ── Unassign Confirmation Modal ── */}
       {isUnassignModalOpen && tenantToUnassign && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-sm bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative">
+          <div className="w-full max-w-sm bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative max-h-[90dvh] overflow-y-auto">
             <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
               <ShieldAlert className="w-5 h-5 text-rose-500" />
               Unallocate Tenant
@@ -1667,7 +1658,7 @@ export default function AdminPropertiesPage() {
       {/* ── Dossier drawer ── */}
       {isDossierOpen && selectedTenant && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/55 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="w-full max-w-2xl bg-white dark:bg-slate-900 border-l border-slate-250 dark:border-slate-800 h-full overflow-y-auto p-6 relative flex flex-col justify-between animate-in slide-in-from-right duration-350 shadow-2xl">
+          <div className="w-full max-w-2xl bg-white dark:bg-slate-900 border-l border-slate-250 dark:border-slate-800 h-full overflow-y-auto p-6 relative flex flex-col justify-between animate-in slide-in-from-right duration-350 shadow-2xl max-h-[90dvh] overflow-y-auto">
             <button
               onClick={() => {
                 setIsDossierOpen(false);

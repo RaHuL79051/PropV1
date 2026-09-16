@@ -9,6 +9,10 @@ export const generateAndSendMonthlyBills = async () => {
   try {
     console.log('[Scheduler] Starting monthly rent invoice generation and email dispatch...');
     
+    const now = new Date();
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
     // Find all active connections (not deleted)
     const connections = await TenantOwnerConnection.find({ isDeleted: false })
       .populate({
@@ -30,20 +34,40 @@ export const generateAndSendMonthlyBills = async () => {
       if (!tenant || !tenant.email || processedTenantIds.has(tenant._id.toString())) {
         continue;
       }
-      
+
       processedTenantIds.add(tenant._id.toString());
-      
+
+      // Only tenants who currently occupy a room owe rent.
+      if (!tenant.assignedRoom) {
+        continue;
+      }
+
+      // A tenant who moved in this month was already charged a pro-rated amount
+      // for their part of it; their full-month cycle starts next month.
+      if (tenant.joiningDate) {
+        const joined = new Date(tenant.joiningDate);
+        if (joined >= periodStart && joined <= periodEnd) {
+          continue;
+        }
+      }
+
+      // Guard against a second run in the same month (for example after a restart).
+      const alreadyBilled = await Payment.findOne({
+        tenant: tenant._id,
+        dueDate: { $gte: periodStart, $lte: periodEnd },
+        notes: { $regex: '^Rent Invoice for' }
+      });
+      if (alreadyBilled) {
+        continue;
+      }
+
       // Calculate base rent
+      const room = tenant.assignedRoom;
       let baseRent = tenant.rentAmount;
       if (baseRent === null || baseRent === undefined) {
-        const room = tenant.assignedRoom;
-        if (room) {
-          baseRent = room.roomType === 'flat'
-            ? Math.round(room.monthlyRent / (room.bedCapacity || 1))
-            : room.monthlyRent;
-        } else {
-          baseRent = 0;
-        }
+        baseRent = room.roomType === 'flat'
+          ? Math.round(room.monthlyRent / (room.bedCapacity || 1))
+          : room.monthlyRent;
       }
 
       const additionalCharges = tenant.additionalCharges || [];
@@ -56,11 +80,11 @@ export const generateAndSendMonthlyBills = async () => {
       }
 
       const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-      const currentMonthName = monthNames[new Date().getMonth()];
-      const currentYear = new Date().getFullYear();
+      const currentMonthName = monthNames[now.getMonth()];
+      const currentYear = now.getFullYear();
 
-      const dueDate = new Date();
-      dueDate.setDate(5); // Due date is 5th of the month
+      // Rent for the new month is due on the 5th of that month.
+      const dueDate = new Date(now.getFullYear(), now.getMonth(), 5, 23, 59, 59, 999);
 
       // Build breakdown notes
       let description = `Rent Invoice for ${currentMonthName} ${currentYear}.\nBase Rent: ₹${baseRent}\n`;
@@ -121,16 +145,11 @@ export const generateAndSendMonthlyBills = async () => {
 };
 
 export const startMonthlyBillingScheduler = () => {
-  // Store the last processed month to prevent duplicate runs on the same day
-  let lastRunMonth = -1;
-
+  // The job itself is idempotent per tenant per month, so it is safe to sweep
+  // daily. That also lets a server that was asleep on the 1st catch up rather
+  // than skipping a month's billing entirely.
   const runCheck = async () => {
-    const today = new Date();
-    // Run only on the 1st of the month
-    if (today.getDate() === 1 && today.getMonth() !== lastRunMonth) {
-      lastRunMonth = today.getMonth();
-      await generateAndSendMonthlyBills();
-    }
+    await generateAndSendMonthlyBills();
   };
 
   // Run on startup

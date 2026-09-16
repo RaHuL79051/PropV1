@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import api from '../../lib/api';
 import { useToastStore } from '../../store/toastStore';
+import { getApiErrorMessage } from '../../lib/apiError';
 import { 
   Building2, Mail, Lock, User, Phone, Loader2, ArrowRight, 
   CheckCircle2, Clock, ShieldCheck 
@@ -41,7 +42,7 @@ export default function RegisterPage() {
       setRegisteredName(res.data.user?.fullName || fullName);
       setRegistered(true);
     } catch (err: any) {
-      const errMsg = err.response?.data?.message || 'Registration failed. Please try again.';
+      const errMsg = getApiErrorMessage(err, 'Registration failed. Please try again.');
       showToast(errMsg, 'error');
     } finally {
       setIsLoading(false);

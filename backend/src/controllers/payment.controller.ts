@@ -5,17 +5,38 @@ import TenantOwnerConnection from '../models/TenantOwnerConnection.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import { updateTenantStatsByAadhaar } from '../utils/scoreHelper.js';
+import { AppError as ApiError } from '../middleware/errorHandler.js';
+
+// An owner may only touch invoices belonging to a tenant they are linked to.
+const assertPaymentAccess = async (req: AuthenticatedRequest, tenantId: any, action: string) => {
+  if (req.user?.role === 'admin') return;
+  const connection = await TenantOwnerConnection.findOne({
+    tenant: tenantId,
+    owner: req.user?.userId,
+    isDeleted: false
+  });
+  if (!connection) {
+    throw new ApiError(`Unauthorized attempt to ${action}`, 403);
+  }
+};
 
 export const createPayment = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const { tenant, property, room, amount, dueDate } = req.body;
+
+    await assertPaymentAccess(req, tenant, 'invoice this tenant');
+
+    const parsedDueDate = new Date(dueDate);
+    if (isNaN(parsedDueDate.getTime())) {
+      throw new AppError('A valid due date is required', 400);
+    }
 
     const payment = await Payment.create({
       tenant,
       property,
       room,
       amount,
-      dueDate: new Date(dueDate),
+      dueDate: parsedDueDate,
       status: 'unpaid',
       paymentMethod: 'none',
       transactionId: null
@@ -67,7 +88,13 @@ export const payInvoice = async (req: AuthenticatedRequest, res: Response, next:
 
     const payment = await Payment.findById(id);
     if (!payment) {
-      throw new AppError('Rent invoice not found', 404);
+      throw new AppError('That rent invoice no longer exists.', 404);
+    }
+
+    await assertPaymentAccess(req, payment.tenant, 'settle this invoice');
+
+    if (payment.status === 'paid') {
+      throw new AppError('This invoice has already been marked as paid.', 409);
     }
 
     payment.status = 'paid';

@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import api from '../../../lib/api';
 import { useToastStore } from '../../../store/toastStore';
 import { Building2, Loader2, ShieldCheck, Mail, Phone, User, CheckCircle2 } from 'lucide-react';
+import { getApiErrorMessage } from '../../../lib/apiError';
 
 interface InviteDetails {
   token: string;
@@ -45,7 +46,7 @@ export default function TenantInvitePage() {
         setInvite(res.data.invite);
         setEmail(res.data.invite.email || '');
       } catch (err: any) {
-        showToast(err.response?.data?.message || 'Invitation link could not be loaded', 'error');
+        showToast(getApiErrorMessage(err, 'Invitation link could not be loaded'), 'error');
       } finally {
         setLoading(false);
       }
@@ -72,12 +73,7 @@ export default function TenantInvitePage() {
       setAccepted(true);
       showToast('Your profile has been linked successfully', 'success');
     } catch (err: any) {
-      if (err.response?.data?.errors && Array.isArray(err.response.data.errors)) {
-        const details = err.response.data.errors.map((e: any) => `${e.field.replace('body.', '')}: ${e.message}`).join(', ');
-        showToast(`Validation failed: ${details}`, 'error');
-      } else {
-        showToast(err.response?.data?.message || 'Failed to complete invitation', 'error');
-      }
+      showToast(getApiErrorMessage(err, 'Failed to complete invitation'), 'error');
     } finally {
       setSubmitting(false);
     }

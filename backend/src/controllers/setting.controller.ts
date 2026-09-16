@@ -8,7 +8,7 @@ export const getSettingByKey = async (req: Request, res: Response, next: NextFun
     const { key } = req.params;
     const setting = await Setting.findOne({ key });
     if (!setting) {
-      throw new AppError('Setting not found', 404);
+      throw new AppError(`No setting named "${key}" exists.`, 404);
     }
     return res.status(200).json(setting);
   } catch (error) {

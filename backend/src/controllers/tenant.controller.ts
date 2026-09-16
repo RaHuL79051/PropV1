@@ -18,6 +18,23 @@ import { sendMail } from '../utils/mailer.js';
 import { buildTenantInviteEmail } from '../templates/inviteEmail.js';
 import { buildRentBillEmail } from '../templates/rentBillEmail.js';
 
+// Throws unless the caller is an admin or currently linked to this tenant.
+export const assertTenantAccess = async (
+  req: AuthenticatedRequest,
+  tenantId: string,
+  action = 'access this tenant'
+) => {
+  if (req.user?.role === 'admin') return;
+  const connection = await TenantOwnerConnection.findOne({
+    tenant: tenantId,
+    owner: req.user?.userId,
+    isDeleted: false
+  });
+  if (!connection) {
+    throw new AppError(`Unauthorized attempt to ${action}`, 403);
+  }
+};
+
 // Helper to get active tenant IDs for an owner
 export const getOwnerTenantIds = async (ownerId: string): Promise<any[]> => {
   const connections = await TenantOwnerConnection.find({ owner: ownerId, isDeleted: false }).select('tenant');
@@ -36,7 +53,12 @@ export const checkUnpaidPersonsLimit = async (ownerId: string) => {
   const unpaidPersons = Math.max(0, totalTenants - 2 - paidPersons);
 
   if (unpaidPersons > 0) {
-    throw new AppError(`Payment required: You have unpaid persons. Please clear your dues to use portal services.`, 402);
+    const amountDue = unpaidPersons * 20;
+    throw new AppError(
+      `Payment required: ${unpaidPersons} tenant${unpaidPersons > 1 ? 's are' : ' is'} beyond your free limit of 2. ` +
+        `Please pay ₹${amountDue} to unlock the portal.`,
+      402
+    );
   }
 };
 
@@ -47,6 +69,30 @@ const getFrontendUrl = (req?: Request) => {
 
 const hashInviteToken = (token: string) => crypto.createHash('sha256').update(token).digest('hex');
 
+// Reference fields may arrive raw or populated depending on the query.
+const refId = (value: any): string | undefined => {
+  if (!value) return undefined;
+  return (value._id ?? value).toString();
+};
+
+// Resolves the rent a single tenant owes: an explicit per-tenant override wins,
+// otherwise a flat's rent is split across its occupants and a PG bed pays the room rate.
+export const resolveTenantRent = (tenant: any, room: any): number => {
+  if (tenant?.rentAmount !== null && tenant?.rentAmount !== undefined) {
+    return Number(tenant.rentAmount);
+  }
+  if (!room) return 0;
+  return room.roomType === 'flat'
+    ? Math.round(room.monthlyRent / (room.bedCapacity || 1))
+    : room.monthlyRent;
+};
+
+/**
+ * Bills a tenant who moves in part-way through a month for the days they will
+ * actually occupy the bed. A tenant joining on the 16th of a 30-day month is
+ * charged for the 16th-30th inclusive, i.e. 15 of the 30 days. From the 1st of
+ * the following month the normal full-month cycle takes over.
+ */
 export const createProratedInvoice = async (
   tenantId: string,
   propertyId: string,
@@ -54,37 +100,102 @@ export const createProratedInvoice = async (
   monthlyRent: number,
   joiningDateInput: Date | string | null | undefined
 ) => {
-  if (!joiningDateInput) return null;
+  if (!joiningDateInput || !monthlyRent || monthlyRent <= 0) return null;
   const joiningDate = new Date(joiningDateInput);
   if (isNaN(joiningDate.getTime())) return null;
 
   const year = joiningDate.getFullYear();
   const month = joiningDate.getMonth();
 
-  const N = new Date(year, month + 1, 0).getDate();
-  const D = joiningDate.getDate();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const joinDay = joiningDate.getDate();
+  // Inclusive of the joining day itself.
+  const remainingDays = daysInMonth - joinDay + 1;
 
-  let remainingDays = N;
-  if (D > 1) {
-    remainingDays = N - D;
-  }
-
-  const proratedAmount = Math.round((monthlyRent / N) * remainingDays);
-
+  const proratedAmount = Math.round((monthlyRent / daysInMonth) * remainingDays);
   if (proratedAmount <= 0) return null;
+
+  // Never raise a second joining invoice for the same move-in.
+  const periodStart = new Date(year, month, 1);
+  const periodEnd = new Date(year, month + 1, 0, 23, 59, 59, 999);
+  const existing = await Payment.findOne({
+    tenant: tenantId,
+    dueDate: { $gte: periodStart, $lte: periodEnd },
+    notes: { $regex: '^Pro-rated joining rent' }
+  });
+  if (existing) return existing;
+
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const notes =
+    `Pro-rated joining rent for ${joinDay}-${daysInMonth} ${monthNames[month]} ${year}.\n` +
+    `Monthly rent: ₹${monthlyRent} over ${daysInMonth} days.\n` +
+    `Charged for ${remainingDays} day(s): ₹${proratedAmount}.`;
 
   const payment = await Payment.create({
     tenant: tenantId,
     property: propertyId,
     room: roomId,
     amount: proratedAmount,
-    dueDate: joiningDate,
+    // Due at the end of the joining month; the regular cycle resets on the 1st.
+    dueDate: periodEnd,
     status: 'unpaid',
     paymentMethod: 'none',
-    transactionId: null
+    transactionId: null,
+    notes
   });
 
   return payment;
+};
+
+/**
+ * Verifies that a property/room/bed trio exists, hangs together, and belongs to
+ * the given owner before anything is allocated to it.
+ */
+export const resolveAllocation = async (
+  ownerId: string,
+  propertyId?: string | null,
+  roomId?: string | null,
+  bedId?: string | null,
+  tenantId?: string | null
+) => {
+  if (!roomId) return null;
+
+  const room = await Room.findById(roomId);
+  if (!room) throw new AppError('Selected room could not be found', 404);
+
+  const property = await Property.findById(propertyId || room.property);
+  if (!property) throw new AppError('Selected property could not be found', 404);
+
+  if (room.property.toString() !== property._id.toString()) {
+    throw new AppError('Selected room does not belong to the selected property', 400);
+  }
+  if (property.owner.toString() !== ownerId.toString()) {
+    throw new AppError('You can only allocate space in your own properties', 403);
+  }
+
+  let bed = null;
+  if (bedId) {
+    bed = await Bed.findById(bedId);
+    if (!bed) throw new AppError('Selected bed could not be found', 404);
+    if (bed.room.toString() !== room._id.toString()) {
+      throw new AppError('Selected bed does not belong to the selected room', 400);
+    }
+    if (bed.isOccupied && (!tenantId || bed.tenant?.toString() !== tenantId.toString())) {
+      throw new AppError('That bed is already occupied. Please choose a vacant one.', 409);
+    }
+  }
+
+  if (room.roomType === 'flat') {
+    const occupants = await Tenant.countDocuments({
+      assignedRoom: room._id,
+      ...(tenantId ? { _id: { $ne: tenantId } } : {})
+    });
+    if (occupants >= room.bedCapacity) {
+      throw new AppError('This flat is already at its maximum number of occupants.', 409);
+    }
+  }
+
+  return { property, room, bed };
 };
 
 export const createTenant = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
@@ -98,6 +209,11 @@ export const createTenant = async (req: AuthenticatedRequest, res: Response, nex
       emergencyContact,
       occupation,
       address,
+      assignedProperty,
+      assignedRoom,
+      assignedBed,
+      rentAmount,
+      joiningDate,
       ownerId: bodyOwnerId
     } = req.body;
     const ownerId = req.user?.role === 'admin' && bodyOwnerId ? bodyOwnerId : req.user?.userId;
@@ -111,7 +227,22 @@ export const createTenant = async (req: AuthenticatedRequest, res: Response, nex
     let connection = tenant ? await TenantOwnerConnection.findOne({ tenant: tenant._id, owner: ownerId }) : null;
 
     if (connection && !connection.isDeleted) {
-      throw new AppError('Tenant with this Aadhaar number already exists in your registry', 400);
+      throw new AppError('A tenant with this Aadhaar number is already active in your registry.', 409);
+    }
+
+    // Linking another person to this owner consumes a licence slot.
+    if (req.user?.role !== 'admin') {
+      await checkUnpaidPersonsLimit(ownerId);
+    }
+
+    // Validate any requested allocation up-front so a failure does not leave a
+    // half-created tenant behind.
+    const allocation = assignedRoom
+      ? await resolveAllocation(ownerId, assignedProperty, assignedRoom, assignedBed, tenant?._id?.toString())
+      : null;
+
+    if (allocation && tenant && tenant.assignedRoom && tenant.assignedRoom.toString() !== assignedRoom) {
+      throw new AppError('This tenant is already occupying a room under another owner and cannot be allocated here', 400);
     }
 
     const latestLog = await VerificationLog.findOne({
@@ -156,7 +287,47 @@ export const createTenant = async (req: AuthenticatedRequest, res: Response, nex
       tenant.address = address || tenant.address;
     }
 
+    // Apply the allocation, if one was supplied with the registration.
+    let effectiveJoiningDate: Date | null = null;
+    if (allocation) {
+      tenant.assignedProperty = allocation.property._id as any;
+      tenant.assignedRoom = allocation.room._id as any;
+      tenant.assignedBed = (allocation.bed?._id as any) ?? null;
+      tenant.agreementStatus = allocation.bed ? 'active' : 'pending';
+
+      if (rentAmount !== undefined && rentAmount !== null && rentAmount !== '') {
+        tenant.rentAmount = Number(rentAmount);
+      }
+
+      const parsedJoining = joiningDate ? new Date(joiningDate) : new Date();
+      effectiveJoiningDate = isNaN(parsedJoining.getTime()) ? new Date() : parsedJoining;
+      tenant.joiningDate = effectiveJoiningDate;
+    }
+
     await tenant.save();
+
+    if (allocation) {
+      // Occupy the bed only once the tenant row is safely persisted.
+      if (allocation.bed) {
+        allocation.bed.isOccupied = true;
+        allocation.bed.tenant = tenant._id as any;
+        await allocation.bed.save();
+      }
+      await updateRoomOccupancy(allocation.room._id.toString());
+
+      // Charge only for the days actually occupied in the joining month.
+      try {
+        await createProratedInvoice(
+          tenant._id.toString(),
+          allocation.property._id.toString(),
+          allocation.room._id.toString(),
+          resolveTenantRent(tenant, allocation.room),
+          effectiveJoiningDate
+        );
+      } catch (err) {
+        console.error('Error creating pro-rated joining invoice:', err);
+      }
+    }
 
     // Create or activate connection
     if (!connection) {
@@ -217,7 +388,7 @@ export const activateConnection = async (req: AuthenticatedRequest, res: Respons
 
     const tenant = await Tenant.findOne({ aadhaarNumber });
     if (!tenant) {
-      throw new AppError('Tenant not found with this Aadhaar number', 404);
+      throw new AppError('No tenant record exists for this Aadhaar number.', 404);
     }
 
     let connection = await TenantOwnerConnection.findOne({ tenant: tenant._id, owner: ownerId });
@@ -256,7 +427,7 @@ export const getTenantById = async (req: AuthenticatedRequest, res: Response, ne
     if (req.user?.role !== 'admin') {
       const connection = await TenantOwnerConnection.findOne({ tenant: id, owner: req.user?.userId, isDeleted: false });
       if (!connection) {
-        throw new AppError('Unauthorized access to tenant details', 403);
+        throw new AppError('You do not have access to this tenant.', 403);
       }
     }
 
@@ -280,6 +451,7 @@ export const updateTenant = async (req: AuthenticatedRequest, res: Response, nex
       assignedRoom,
       assignedBed,
       rentAmount,
+      joiningDate,
       verificationStatus
     } = req.body;
     const ownerId = req.user?.userId;
@@ -292,7 +464,7 @@ export const updateTenant = async (req: AuthenticatedRequest, res: Response, nex
     if (req.user?.role !== 'admin') {
       const connection = await TenantOwnerConnection.findOne({ tenant: id, owner: ownerId, isDeleted: false });
       if (!connection) {
-        throw new AppError('Unauthorized update attempt', 403);
+        throw new AppError('You can only update tenants linked to your account.', 403);
       }
     }
 
@@ -323,8 +495,32 @@ export const updateTenant = async (req: AuthenticatedRequest, res: Response, nex
     // Handle Property/Room/Bed reassignments
     const oldBedId = tenant.assignedBed;
     const oldRoomId = tenant.assignedRoom;
+    // A tenant with no room and no bed is moving in rather than moving around.
+    const wasUnallocated = !oldRoomId && !oldBedId;
 
     let allocationChanged = false;
+
+    // Validate the destination before mutating anything.
+    const targetRoomId = assignedRoom !== undefined ? assignedRoom : oldRoomId?.toString() || null;
+    const targetBedId = assignedBed !== undefined ? assignedBed : oldBedId?.toString() || null;
+    const roomOrBedChanged =
+      (assignedRoom !== undefined && assignedRoom !== (oldRoomId?.toString() || null)) ||
+      (assignedBed !== undefined && assignedBed !== (oldBedId?.toString() || null));
+
+    let allocation: Awaited<ReturnType<typeof resolveAllocation>> = null;
+    if (roomOrBedChanged && targetRoomId) {
+      const allocationOwnerId =
+        req.user?.role === 'admin'
+          ? (await Property.findById(assignedProperty ?? tenant.assignedProperty))?.owner?.toString() || ownerId
+          : ownerId;
+      allocation = await resolveAllocation(
+        allocationOwnerId!,
+        assignedProperty ?? tenant.assignedProperty?.toString(),
+        targetRoomId,
+        targetBedId,
+        tenant._id.toString()
+      );
+    }
 
     if (assignedProperty !== undefined && assignedProperty !== (tenant.assignedProperty?.toString() || null)) {
       tenant.assignedProperty = assignedProperty || null;
@@ -334,15 +530,6 @@ export const updateTenant = async (req: AuthenticatedRequest, res: Response, nex
     if (assignedRoom !== undefined && assignedRoom !== (oldRoomId?.toString() || null)) {
       tenant.assignedRoom = assignedRoom || null;
       allocationChanged = true;
-      if (assignedRoom) {
-        const room = await Room.findById(assignedRoom);
-        if (room?.roomType === 'flat') {
-          const occupants = await Tenant.countDocuments({ assignedRoom: room._id, _id: { $ne: tenant._id } });
-          if (occupants >= room.bedCapacity) {
-             throw new AppError('Flat has reached its maximum capacity', 400);
-          }
-        }
-      }
     }
 
     if (assignedBed !== undefined && assignedBed !== (oldBedId?.toString() || null)) {
@@ -351,15 +538,9 @@ export const updateTenant = async (req: AuthenticatedRequest, res: Response, nex
         await Bed.findByIdAndUpdate(oldBedId, { $set: { isOccupied: false, tenant: null } });
       }
 
-      // Assign new bed
+      // Assign new bed (already validated above)
       if (assignedBed) {
-        const newBed = await Bed.findById(assignedBed);
-        if (!newBed || (newBed.isOccupied && newBed.tenant?.toString() !== tenant._id.toString())) {
-          throw new AppError('Selected bed is already occupied or invalid', 400);
-        }
-        newBed.isOccupied = true;
-        newBed.tenant = tenant._id;
-        await newBed.save();
+        await Bed.findByIdAndUpdate(assignedBed, { $set: { isOccupied: true, tenant: tenant._id } });
         tenant.assignedBed = assignedBed;
       } else {
         tenant.assignedBed = null;
@@ -367,13 +548,23 @@ export const updateTenant = async (req: AuthenticatedRequest, res: Response, nex
       allocationChanged = true;
     }
 
+    // Dropping the room without naming a bed must still free the bed behind it.
+    if (allocationChanged && !tenant.assignedRoom && tenant.assignedBed) {
+      await Bed.findByIdAndUpdate(tenant.assignedBed, { $set: { isOccupied: false, tenant: null } });
+      tenant.assignedBed = null;
+    }
+
+    let moveInDate: Date | null = null;
     if (allocationChanged) {
-      if (tenant.assignedBed) {
-        tenant.agreementStatus = 'active';
-      } else if (tenant.assignedRoom) {
-        tenant.agreementStatus = 'pending';
-      } else {
-        tenant.agreementStatus = 'pending';
+      tenant.agreementStatus = tenant.assignedBed ? 'active' : 'pending';
+
+      if (!tenant.assignedRoom && !tenant.assignedBed) {
+        // Fully unassigned: clear the move-in date so a future allocation re-prorates.
+        tenant.joiningDate = null;
+      } else if (wasUnallocated) {
+        const parsedJoining = joiningDate ? new Date(joiningDate) : new Date();
+        moveInDate = isNaN(parsedJoining.getTime()) ? new Date() : parsedJoining;
+        tenant.joiningDate = moveInDate;
       }
     }
 
@@ -383,6 +574,21 @@ export const updateTenant = async (req: AuthenticatedRequest, res: Response, nex
       // Update room occupancy states
       if (oldRoomId) await updateRoomOccupancy(oldRoomId.toString());
       if (tenant.assignedRoom) await updateRoomOccupancy(tenant.assignedRoom.toString());
+
+      // First allocation for this tenant: bill only the days they will occupy.
+      if (moveInDate && allocation) {
+        try {
+          await createProratedInvoice(
+            tenant._id.toString(),
+            allocation.property._id.toString(),
+            allocation.room._id.toString(),
+            resolveTenantRent(tenant, allocation.room),
+            moveInDate
+          );
+        } catch (err) {
+          console.error('Error creating pro-rated joining invoice:', err);
+        }
+      }
     }
     return res.status(200).json({ message: 'Tenant updated successfully', tenant });
   } catch (error) {
@@ -403,20 +609,14 @@ export const deleteTenant = async (req: AuthenticatedRequest, res: Response, nex
     if (req.user?.role !== 'admin') {
       const connection = await TenantOwnerConnection.findOne({ tenant: id, owner: ownerId, isDeleted: false });
       if (!connection) {
-        throw new AppError('Unauthorized delete attempt', 403);
+        throw new AppError('You can only remove tenants linked to your account.', 403);
       }
+
+      const releasedRoomId = tenant.assignedRoom?.toString() || null;
 
       // Release bed if assigned
       if (tenant.assignedBed) {
         await Bed.findByIdAndUpdate(tenant.assignedBed, { $set: { isOccupied: false, tenant: null } });
-      }
-
-      // Update room occupancy
-      if (tenant.assignedRoom) {
-        const roomId = tenant.assignedRoom.toString();
-        setTimeout(async () => {
-          await updateRoomOccupancy(roomId);
-        }, 100);
       }
 
       // Soft delete the connection
@@ -428,20 +628,25 @@ export const deleteTenant = async (req: AuthenticatedRequest, res: Response, nex
       tenant.assignedRoom = null;
       tenant.assignedBed = null;
       tenant.agreementStatus = 'pending';
+      tenant.rentAmount = null;
+      tenant.joiningDate = null;
       await tenant.save();
+
+      // Recompute only after the tenant no longer points at the room.
+      if (releasedRoomId) {
+        await updateRoomOccupancy(releasedRoomId);
+      }
     } else {
       // Admin deletes tenant globally
+      const releasedRoomId = tenant.assignedRoom?.toString() || null;
       if (tenant.assignedBed) {
         await Bed.findByIdAndUpdate(tenant.assignedBed, { $set: { isOccupied: false, tenant: null } });
       }
-      if (tenant.assignedRoom) {
-        const roomId = tenant.assignedRoom.toString();
-        setTimeout(async () => {
-          await updateRoomOccupancy(roomId);
-        }, 100);
-      }
       await TenantOwnerConnection.deleteMany({ tenant: id });
       await Tenant.findByIdAndDelete(id);
+      if (releasedRoomId) {
+        await updateRoomOccupancy(releasedRoomId);
+      }
     }
 
     return res.status(200).json({ message: 'Tenant removed successfully' });
@@ -456,8 +661,13 @@ export const checkoutTenant = async (req: AuthenticatedRequest, res: Response, n
     const { rating, feedback } = req.body;
     const ownerId = req.user?.userId;
 
-    if (rating === undefined || !feedback) {
+    if (rating === undefined || !feedback || !String(feedback).trim()) {
       throw new AppError('Rating and feedback are required for checking out a tenant', 400);
+    }
+
+    const numericRating = Number(rating);
+    if (!Number.isInteger(numericRating) || numericRating < 1 || numericRating > 5) {
+      throw new AppError('Rating must be a whole number between 1 and 5', 400);
     }
 
     const tenant = await Tenant.findById(id);
@@ -468,7 +678,7 @@ export const checkoutTenant = async (req: AuthenticatedRequest, res: Response, n
     if (req.user?.role !== 'admin') {
       const connection = await TenantOwnerConnection.findOne({ tenant: id, owner: ownerId, isDeleted: false });
       if (!connection) {
-        throw new AppError('Unauthorized checkout attempt', 403);
+        throw new AppError('You can only check out tenants linked to your account.', 403);
       }
       await checkUnpaidPersonsLimit(ownerId!);
 
@@ -484,8 +694,8 @@ export const checkoutTenant = async (req: AuthenticatedRequest, res: Response, n
     await TenantReview.create({
       aadhaarNumber: tenant.aadhaarNumber,
       tenantName: tenant.fullName,
-      rating: Number(rating),
-      feedback: String(feedback),
+      rating: numericRating,
+      feedback: String(feedback).trim(),
       owner: ownerId
     });
 
@@ -502,7 +712,11 @@ export const checkoutTenant = async (req: AuthenticatedRequest, res: Response, n
     tenant.assignedRoom = null;
     tenant.assignedBed = null;
     tenant.agreementStatus = 'expired';
-    
+    // Clearing these stops the monthly scheduler from billing a departed tenant.
+    tenant.rentAmount = null;
+    tenant.joiningDate = null;
+    tenant.additionalCharges = [];
+
     await tenant.save();
 
     // Update room occupancy
@@ -537,7 +751,7 @@ export const uploadDocuments = async (req: AuthenticatedRequest, res: Response, 
     if (req.user?.role !== 'admin') {
       const connection = await TenantOwnerConnection.findOne({ tenant: id, owner: ownerId, isDeleted: false });
       if (!connection) {
-        throw new AppError('Unauthorized document upload', 403);
+        throw new AppError('You can only manage documents for tenants linked to your account.', 403);
       }
       await checkUnpaidPersonsLimit(ownerId!);
     }
@@ -550,6 +764,20 @@ export const uploadDocuments = async (req: AuthenticatedRequest, res: Response, 
       photoDocName,
       photoDocData
     } = req.body;
+
+    // Documents are stored inline as base64, and a MongoDB document is capped at
+    // 16MB, so reject anything that would push the tenant record over the edge.
+    const MAX_DOC_BYTES = 4 * 1024 * 1024; // ~3MB of original file once base64-encoded
+    const incoming: Array<[string, any]> = [
+      ['Aadhaar document', aadhaarDocData],
+      ['Agreement document', agreementDocData],
+      ['Photo', photoDocData]
+    ];
+    for (const [label, data] of incoming) {
+      if (typeof data === 'string' && data.length > MAX_DOC_BYTES) {
+        throw new AppError(`${label} is too large. Please upload a file under 3MB.`, 413);
+      }
+    }
 
     if (!tenant.documents) {
       tenant.documents = {};
@@ -582,6 +810,10 @@ export const createTenantInvite = async (req: AuthenticatedRequest, res: Respons
       email, 
       sendMethod = 'email',
       whatsappNumber,
+      assignedProperty,
+      assignedRoom,
+      assignedBed,
+      joiningDate,
       ownerId: bodyOwnerId 
     } = req.body;
     const ownerId = req.user?.role === 'admin' && bodyOwnerId ? bodyOwnerId : req.user?.userId;
@@ -590,6 +822,19 @@ export const createTenantInvite = async (req: AuthenticatedRequest, res: Respons
       throw new AppError('Authentication required', 401);
     }
 
+    // Inviting someone consumes a licence slot in the same way adding them does.
+    if (req.user?.role !== 'admin') {
+      await checkUnpaidPersonsLimit(ownerId);
+    }
+
+    // Confirm the bed being held for this invite is really the owner's and free.
+    const allocation = assignedRoom
+      ? await resolveAllocation(ownerId, assignedProperty, assignedRoom, assignedBed)
+      : null;
+
+    const parsedJoining = joiningDate ? new Date(joiningDate) : null;
+    const inviteJoiningDate = parsedJoining && !isNaN(parsedJoining.getTime()) ? parsedJoining : null;
+
     let targetEmail = email;
     const existingTenant = await Tenant.findOne({ aadhaarNumber });
     if (!targetEmail && existingTenant?.email) {
@@ -597,7 +842,7 @@ export const createTenantInvite = async (req: AuthenticatedRequest, res: Respons
     }
 
     if (sendMethod === 'email' && !targetEmail) {
-      throw new AppError('Tenant email is required to send an invitation', 400);
+      throw new AppError('An email address is required to send the invitation. Enter one, or share the link over WhatsApp instead.', 400);
     }
 
     // Set fallback placeholder email for WhatsApp method if none exists
@@ -615,23 +860,24 @@ export const createTenantInvite = async (req: AuthenticatedRequest, res: Respons
       tokenHash,
       status: 'pending',
       expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 72),
-      assignedProperty: null,
-      assignedRoom: null,
-      assignedBed: null,
-      joiningDate: null
+      assignedProperty: allocation?.property._id ?? null,
+      assignedRoom: allocation?.room._id ?? null,
+      assignedBed: allocation?.bed?._id ?? null,
+      joiningDate: inviteJoiningDate
     });
 
     const inviteUrl = `${getFrontendUrl(req)}/invite/${rawToken}`;
 
     if (sendMethod === 'email') {
       const subject = 'Property Manager invitation to complete your tenant profile';
+      const owner = await User.findById(ownerId).select('fullName');
       const inviteEmail = buildTenantInviteEmail({
-        ownerName: String((req.user as any)?.fullName || 'Property Manager'),
+        ownerName: String(owner?.fullName || 'Property Manager'),
         tenantEmail: targetEmail,
         inviteUrl,
-        propertyName: null,
-        roomNumber: null,
-        bedNumber: null
+        propertyName: allocation?.property?.propertyName ?? null,
+        roomNumber: allocation?.room?.roomNumber ?? null,
+        bedNumber: allocation?.bed?.bedNumber ?? null
       });
 
       try {
@@ -643,7 +889,11 @@ export const createTenantInvite = async (req: AuthenticatedRequest, res: Respons
         });
       } catch (mailError: any) {
         console.error('[Invite] Failed to send invitation email:', mailError);
-        throw new AppError(`Failed to send invitation email: ${mailError.message || 'SMTP Server Error'}`, 500);
+        throw new AppError(
+          `We could not email the invitation to ${targetEmail}. Please check the address and try again, ` +
+            'or share the invitation link directly.',
+          502
+        );
       }
     }
 
@@ -756,10 +1006,6 @@ export const acceptTenantInvite = async (req: Request, res: Response, next: Next
     } else if (invite.panNumber) {
       tenant.panNumber = invite.panNumber;
     }
-    tenant.joiningDate = null;
-    tenant.assignedProperty = null;
-    tenant.assignedRoom = null;
-    tenant.assignedBed = null;
 
     tenant.verificationStatus = verificationStatus;
     tenant.riskLevel = riskLevel;
@@ -767,7 +1013,60 @@ export const acceptTenantInvite = async (req: Request, res: Response, next: Next
     tenant.creditScore = creditScore;
     tenant.previousOwnerFeedback = previousOwnerFeedback;
 
+    // Apply the bed the owner reserved on the invite. An existing tenant who is
+    // still living somewhere else keeps that allocation untouched.
+    let allocation: Awaited<ReturnType<typeof resolveAllocation>> = null;
+    let moveInDate: Date | null = null;
+
+    const inviteRoomId = refId(invite.assignedRoom);
+    if (inviteRoomId) {
+      if (tenant.assignedRoom && tenant.assignedRoom.toString() !== inviteRoomId) {
+        throw new AppError(
+          'This Aadhaar number is already allocated to another room. Please contact the property owner.',
+          409
+        );
+      }
+
+      allocation = await resolveAllocation(
+        ownerId,
+        refId(invite.assignedProperty),
+        inviteRoomId,
+        refId(invite.assignedBed),
+        tenant._id.toString()
+      );
+
+      tenant.assignedProperty = allocation!.property._id as any;
+      tenant.assignedRoom = allocation!.room._id as any;
+      tenant.assignedBed = (allocation!.bed?._id as any) ?? null;
+      tenant.agreementStatus = allocation!.bed ? 'active' : 'pending';
+
+      moveInDate = invite.joiningDate ? new Date(invite.joiningDate) : new Date();
+      if (isNaN(moveInDate.getTime())) moveInDate = new Date();
+      tenant.joiningDate = moveInDate;
+    }
+
     await tenant.save();
+
+    if (allocation) {
+      if (allocation.bed) {
+        allocation.bed.isOccupied = true;
+        allocation.bed.tenant = tenant._id as any;
+        await allocation.bed.save();
+      }
+      await updateRoomOccupancy(allocation.room._id.toString());
+
+      try {
+        await createProratedInvoice(
+          tenant._id.toString(),
+          allocation.property._id.toString(),
+          allocation.room._id.toString(),
+          resolveTenantRent(tenant, allocation.room),
+          moveInDate
+        );
+      } catch (err) {
+        console.error('Error creating pro-rated joining invoice on invite acceptance:', err);
+      }
+    }
 
     // Create or activate TenantOwnerConnection
     let connection = await TenantOwnerConnection.findOne({ tenant: tenant._id, owner: ownerId });
@@ -829,8 +1128,12 @@ export const addTenantCharge = async (req: AuthenticatedRequest, res: Response, 
     const { id } = req.params;
     const { description, amount } = req.body;
 
-    if (!description || !amount) {
-      throw new AppError('Description and amount are required', 400);
+    const numericAmount = Number(amount);
+    if (!description || !String(description).trim()) {
+      throw new AppError('Description is required', 400);
+    }
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      throw new AppError('Amount must be a number greater than zero', 400);
     }
 
     const tenant = await Tenant.findById(id);
@@ -838,11 +1141,13 @@ export const addTenantCharge = async (req: AuthenticatedRequest, res: Response, 
       throw new AppError('Tenant not found', 404);
     }
 
+    await assertTenantAccess(req, id, 'add a charge to this tenant');
+
     tenant.additionalCharges = tenant.additionalCharges || [];
     tenant.additionalCharges.push({
       _id: new mongoose.Types.ObjectId(),
-      description,
-      amount: Number(amount),
+      description: String(description).trim(),
+      amount: numericAmount,
       createdAt: new Date()
     } as any);
 
@@ -865,6 +1170,8 @@ export const removeTenantCharge = async (req: AuthenticatedRequest, res: Respons
     if (!tenant) {
       throw new AppError('Tenant not found', 404);
     }
+
+    await assertTenantAccess(req, id, 'remove a charge from this tenant');
 
     tenant.additionalCharges = (tenant.additionalCharges || []).filter(
       (c: any) => c._id.toString() !== chargeId
@@ -899,44 +1206,35 @@ export const sendTenantBillManually = async (req: AuthenticatedRequest, res: Res
     }
 
     // Verify owner connection
-    const connection = await TenantOwnerConnection.findOne({ tenant: tenant._id, owner: ownerId, isDeleted: false });
-    if (!connection && req.user?.role !== 'admin') {
-      throw new AppError('Unauthorized access to tenant billing', 403);
-    }
+    await assertTenantAccess(req, tenant._id.toString(), 'bill this tenant');
 
     if (!tenant.email) {
-      throw new AppError('Tenant email is required to send the bill', 400);
+      throw new AppError('This tenant has no email address on file, so the bill cannot be sent. Add one to their profile first.', 400);
     }
 
-    // Calculate base rent
-    let baseRent: number;
-    if (tenant.rentAmount !== null && tenant.rentAmount !== undefined) {
-      baseRent = tenant.rentAmount;
-    } else {
-      const room = tenant.assignedRoom as any;
-      if (room) {
-        baseRent = room.roomType === 'flat'
-          ? Math.round(room.monthlyRent / (room.bedCapacity || 1))
-          : room.monthlyRent;
-      } else {
-        baseRent = 0;
-      }
+    if (!tenant.assignedRoom) {
+      throw new AppError('Tenant is not allocated to a room, so no rent can be billed', 400);
     }
+
+    const baseRent = resolveTenantRent(tenant, tenant.assignedRoom as any);
 
     const additionalCharges = tenant.additionalCharges || [];
     const additionalTotal = additionalCharges.reduce((sum: number, c: any) => sum + c.amount, 0);
     const totalAmount = baseRent + additionalTotal;
 
     if (totalAmount <= 0) {
-      throw new AppError('Tenant has zero or negative total billing amount', 400);
+      throw new AppError('This tenant has nothing to bill. Set a rent on their room or add a charge first.', 400);
     }
 
     const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
     const currentMonthName = monthNames[new Date().getMonth()];
     const currentYear = new Date().getFullYear();
 
-    const dueDate = new Date();
-    dueDate.setDate(5); // Due date is 5th of the month
+    // Rent is due on the 5th; if that has already passed this month the bill is
+    // payable immediately rather than being created already overdue.
+    const now = new Date();
+    const fifth = new Date(now.getFullYear(), now.getMonth(), 5, 23, 59, 59, 999);
+    const dueDate = fifth.getTime() < now.getTime() ? now : fifth;
 
     let description = `Rent Invoice for ${currentMonthName} ${currentYear}.\nBase Rent: ₹${baseRent}\n`;
     if (additionalCharges.length > 0) {

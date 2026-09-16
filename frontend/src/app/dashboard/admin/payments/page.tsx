@@ -8,6 +8,7 @@ import {
   MapPin, Check, User, Loader2, X, Search 
 } from 'lucide-react';
 import { Payment, Tenant } from '../../../../types';
+import { getApiErrorMessage } from '../../../../lib/apiError';
 
 export default function AdminPaymentsPage() {
   const showToast = useToastStore((state) => state.showToast);
@@ -41,7 +42,7 @@ export default function AdminPaymentsPage() {
       // Filter tenants that actually live in rooms globally
       setTenants(tenantsRes.data.filter((t: any) => t.assignedProperty && t.assignedRoom));
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to fetch payments data', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to fetch payments data'), 'error');
     } finally {
       setIsLoading(false);
     }
@@ -79,7 +80,7 @@ export default function AdminPaymentsPage() {
       resetInvoiceForm();
       fetchPaymentsAndTenants();
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to generate invoice', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to generate invoice'), 'error');
     } finally {
       setSubmitting(false);
     }
@@ -102,7 +103,7 @@ export default function AdminPaymentsPage() {
       setTransactionId('');
       fetchPaymentsAndTenants();
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to clear invoice', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to clear invoice'), 'error');
     } finally {
       setSubmitting(false);
     }
@@ -273,7 +274,7 @@ export default function AdminPaymentsPage() {
       {/* 1. Create Invoice Modal */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative max-h-[90dvh] overflow-y-auto">
             <button
               onClick={() => setIsAddModalOpen(false)}
               className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400"
@@ -351,7 +352,7 @@ export default function AdminPaymentsPage() {
       {/* 2. Pay Invoice Modal */}
       {isPayModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative max-h-[90dvh] overflow-y-auto">
             <button
               onClick={() => {
                 setIsPayModalOpen(false);

@@ -8,6 +8,7 @@ import {
   MapPin, User, Loader2, X, Trash2, AlertTriangle 
 } from 'lucide-react';
 import { Agreement, Tenant } from '../../../../types';
+import { getApiErrorMessage } from '../../../../lib/apiError';
 
 export default function AgreementsPage() {
   const showToast = useToastStore((state) => state.showToast);
@@ -34,7 +35,7 @@ export default function AgreementsPage() {
       setAgreements(agreementsRes.data);
       setTenants(tenantsRes.data);
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to fetch agreement details', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to fetch agreement details'), 'error');
     } finally {
       setIsLoading(false);
     }
@@ -61,7 +62,7 @@ export default function AgreementsPage() {
       setDeleteAgreementId('');
       fetchAgreementsAndTenants();
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to delete agreement', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to delete agreement'), 'error');
     } finally {
       setIsDeleting(false);
     }
@@ -97,7 +98,7 @@ export default function AgreementsPage() {
   return (
     <div className="space-y-6 animate-stagger">
       {/* Header Banner */}
-      <div className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-indigo-600 via-primary to-blue-500 text-white shadow-xl">
+      <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white shadow-xl">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.15),transparent_50%)]" />
         <div className="absolute -bottom-8 -right-8 w-32 h-32 rounded-full bg-white/5 blur-2xl" />
         <div className="relative p-6 md:p-8">

@@ -5,23 +5,24 @@ import Link from 'next/link';
 import api from '../../lib/api';
 import { useToastStore } from '../../store/toastStore';
 import { Building2, Mail, Loader2, ArrowRight } from 'lucide-react';
+import { getApiErrorMessage } from '../../lib/apiError';
 
 export default function ForgotPasswordPage() {
   const showToast = useToastStore((state) => state.showToast);
 
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [simulatedToken, setSimulatedToken] = useState<string | null>(null);
+  const [requestSent, setRequestSent] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     try {
-      const res = await api.post('/auth/forgot-password', { email });
-      setSimulatedToken(res.data.resetToken);
-      showToast('Instructions generated successfully!', 'success');
+      await api.post('/auth/forgot-password', { email });
+      setRequestSent(true);
+      showToast('Check your inbox for the reset link.', 'success');
     } catch (err: any) {
-      const errMsg = err.response?.data?.message || 'Something went wrong. Please try again.';
+      const errMsg = getApiErrorMessage(err, 'Something went wrong. Please try again.');
       showToast(errMsg, 'error');
     } finally {
       setIsLoading(false);
@@ -47,18 +48,14 @@ export default function ForgotPasswordPage() {
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Enter your email to receive recovery parameters</p>
         </div>
 
-        {simulatedToken ? (
+        {requestSent ? (
           <div className="space-y-6">
             <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 text-emerald-900 dark:text-emerald-100 text-sm">
-              <p className="font-bold mb-1">Simulated Reset Link Ready!</p>
-              <p className="text-xs break-all mb-3">A reset token has been generated inside the backend API logs.</p>
-              <Link
-                href={`/reset-password?token=${simulatedToken}`}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all"
-              >
-                Go to Password Change Screen
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
+              <p className="font-bold mb-1">Check your inbox</p>
+              <p className="text-xs leading-relaxed">
+                If an account exists for <span className="font-semibold break-all">{email}</span>, we have emailed a
+                password reset link to it. The link is valid for one hour.
+              </p>
             </div>
 
             <Link

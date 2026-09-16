@@ -6,9 +6,10 @@ import { useToastStore } from '../../../store/toastStore';
 import {
   Home, Users, CreditCard, Percent, ArrowUpRight, Wrench, Clock, FileText, CheckCircle2,
   TrendingUp, Calendar, AlertTriangle, Loader2, Plus, Wallet, Download, X, Coins, ChevronRight,
-  ArrowRight, ShieldCheck, ShoppingBag, Eye
+  ArrowRight, ShieldCheck, ShoppingBag, Eye, Sparkles
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { getApiErrorMessage } from '../../../lib/apiError';
 
 interface OwnerStats {
   totalProperties: number;
@@ -116,7 +117,7 @@ export default function OwnerDashboardPage() {
         setStats(statsRes.data);
         setBillingStatus(billingRes.data);
       } catch (err: any) {
-        showToast(err.response?.data?.message || 'Failed to load dashboard metrics', 'error');
+        showToast(getApiErrorMessage(err, 'Failed to load dashboard metrics'), 'error');
       } finally {
         setIsLoading(false);
       }
@@ -170,28 +171,31 @@ export default function OwnerDashboardPage() {
   return (
     <div className="space-y-8 animate-stagger">
       {/* Welcome Banner */}
-      <div className="p-5 md:p-8 rounded-2xl bg-gradient-to-br from-indigo-600 via-primary to-blue-500 text-white shadow-xl relative overflow-hidden group">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.15),transparent_50%)]" />
+      <div className="p-5 md:p-7 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white shadow-xl relative overflow-hidden group">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.18),transparent_45%)]" />
         <div className="absolute -right-20 -top-20 w-56 h-56 rounded-full bg-white/5 blur-3xl group-hover:scale-110 transition-transform duration-700" />
         <div className="absolute -left-10 -bottom-10 w-40 h-40 rounded-full bg-white/5 blur-2xl" />
-        <div className="relative z-10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
-          <div className="min-w-0 flex-1">
-            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.22em] text-white/70">Executive Dashboard</span>
-            <h2 className="text-xl sm:text-2xl font-black tracking-tight mt-1 break-words">Executive Portfolio Hub</h2>
-            <p className="text-white/80 text-xs sm:text-sm mt-1">Review operational occupancy rates, rent invoices, and tenant risk levels.</p>
+        <div className="relative z-10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="min-w-0 flex-1 space-y-1">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-white/90 text-[11px] font-bold uppercase tracking-widest border border-white/15">
+              <Sparkles className="w-3.5 h-3.5 text-cyan-300" /> Owner Console
+            </div>
+            <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white">
+              Portfolio Command Center
+            </h2>
           </div>
           <div className="flex gap-2 sm:gap-3 shrink-0 w-full sm:w-auto">
             <button
               onClick={handleDownloadApp}
-              className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl bg-white/15 hover:bg-white/25 text-white font-bold text-xs sm:text-sm border border-white/20 shadow-md transition-all hover:scale-105 cursor-pointer backdrop-blur-sm"
+              className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 sm:gap-2 px-4 py-2.5 rounded-xl bg-white/15 hover:bg-white/25 text-white font-extrabold text-xs sm:text-sm border border-white/20 shadow-md backdrop-blur-sm transition-all hover:scale-105 cursor-pointer shrink-0"
             >
-              <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Download App
+              <Download className="w-4 h-4" /> Download App
             </button>
             <a
               href="/dashboard/owner/payments?tab=expenses"
-              className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl bg-white hover:bg-slate-100 text-primary font-bold text-xs sm:text-sm shadow-md transition-all hover:scale-105 shrink-0"
+              className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 sm:gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-slate-100 text-primary font-extrabold text-xs sm:text-sm shadow-md transition-all hover:scale-105 shrink-0"
             >
-              <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Add Expense
+              <Plus className="w-4 h-4 stroke-[2.5]" /> Add Expense
             </a>
           </div>
         </div>
@@ -199,7 +203,7 @@ export default function OwnerDashboardPage() {
 
       {/* Properties Setup Welcome Banner */}
       {stats.totalProperties === 0 && (
-        <div className="p-5 md:p-8 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 text-white shadow-xl relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6">
+        <div className="p-5 md:p-8 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white shadow-xl relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6">
           <div className="space-y-2 min-w-0">
             <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight">Let's Get Started!</h2>
             <p className="text-white/90 text-xs sm:text-sm max-w-xl">
@@ -309,7 +313,7 @@ export default function OwnerDashboardPage() {
             <div className="flex items-end gap-2">
               <h3 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white animate-count-up shrink-0">{stats.occupancyRate}%</h3>
               <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden mb-1 min-w-0">
-                <div 
+                <div
                   className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-primary transition-all duration-1000"
                   style={{ width: `${Math.min(stats.occupancyRate, 100)}%` }}
                 />
@@ -351,11 +355,10 @@ export default function OwnerDashboardPage() {
         <div className="p-4 sm:p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm card-hover">
           <div className="flex justify-between items-start mb-2 sm:mb-3">
             <span className="text-[9px] sm:text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest">Net Profit</span>
-            <div className={`p-2 sm:p-2.5 rounded-xl bg-gradient-to-br shadow-sm ${
-              stats.netProfit >= 0 
-                ? 'from-emerald-500/20 to-emerald-500/5 text-emerald-600 dark:text-emerald-400' 
-                : 'from-rose-500/20 to-rose-500/5 text-rose-600 dark:text-rose-400'
-            }`}>
+            <div className={`p-2 sm:p-2.5 rounded-xl bg-gradient-to-br shadow-sm ${stats.netProfit >= 0
+              ? 'from-emerald-500/20 to-emerald-500/5 text-emerald-600 dark:text-emerald-400'
+              : 'from-rose-500/20 to-rose-500/5 text-rose-600 dark:text-rose-400'
+              }`}>
               <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
@@ -417,7 +420,7 @@ export default function OwnerDashboardPage() {
                     color: '#0F172A',
                     fontSize: '12px',
                     boxShadow: '0 10px 15px -3px rgba(0,0,0,0.08)'
-                  }} 
+                  }}
                 />
                 <Area type="monotone" dataKey="revenue" stroke="#2563EB" strokeWidth={3} fillOpacity={1} fill="url(#colorRevenue)" name="Revenue" />
                 <Area type="monotone" dataKey="expenses" stroke="#EF4444" strokeWidth={3} fillOpacity={1} fill="url(#colorExpenses)" name="Expenses" />
@@ -546,8 +549,8 @@ export default function OwnerDashboardPage() {
                 <button
                   onClick={() => setActiveTab('payments')}
                   className={`text-[11px] sm:text-sm font-bold pb-2 relative transition-colors whitespace-nowrap ${activeTab === 'payments'
-                      ? 'text-primary'
-                      : 'text-slate-450 hover:text-slate-700 dark:hover:text-slate-200'
+                    ? 'text-primary'
+                    : 'text-slate-450 hover:text-slate-700 dark:hover:text-slate-200'
                     }`}
                 >
                   Invoices
@@ -558,8 +561,8 @@ export default function OwnerDashboardPage() {
                 <button
                   onClick={() => setActiveTab('maintenance')}
                   className={`text-[11px] sm:text-sm font-bold pb-2 relative transition-colors whitespace-nowrap ${activeTab === 'maintenance'
-                      ? 'text-primary'
-                      : 'text-slate-450 hover:text-slate-700 dark:hover:text-slate-200'
+                    ? 'text-primary'
+                    : 'text-slate-450 hover:text-slate-700 dark:hover:text-slate-200'
                     }`}
                 >
                   Maintenance
@@ -611,10 +614,10 @@ export default function OwnerDashboardPage() {
                               </td>
                               <td className="py-3 whitespace-nowrap">
                                 <span className={`px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold border ${p.status === 'paid'
-                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/50'
-                                    : p.status === 'overdue'
-                                      ? 'bg-rose-50 text-rose-750 border-rose-200 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-900/50'
-                                      : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/50'
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/50'
+                                  : p.status === 'overdue'
+                                    ? 'bg-rose-50 text-rose-750 border-rose-200 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-900/50'
+                                    : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/50'
                                   }`}>
                                   {p.status}
                                 </span>
@@ -633,10 +636,10 @@ export default function OwnerDashboardPage() {
                               {p.tenant?.fullName || 'Anonymous'}
                             </span>
                             <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border shrink-0 ml-2 ${p.status === 'paid'
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/50'
-                                : p.status === 'overdue'
-                                  ? 'bg-rose-50 text-rose-750 border-rose-200 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-900/50'
-                                  : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/50'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/50'
+                              : p.status === 'overdue'
+                                ? 'bg-rose-50 text-rose-750 border-rose-200 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-900/50'
+                                : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/50'
                               }`}>
                               {p.status}
                             </span>
@@ -675,10 +678,10 @@ export default function OwnerDashboardPage() {
                         <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5 flex-wrap">
                           <span className="truncate">{m.title}</span>
                           <span className={`px-1.5 py-0.2 rounded text-[7px] sm:text-[8px] font-bold uppercase shrink-0 ${m.priority === 'high'
-                              ? 'bg-rose-100 text-rose-700 border border-rose-200 dark:bg-rose-950/30 dark:text-rose-450 dark:border-rose-900/50'
-                              : m.priority === 'medium'
-                                ? 'bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-950/30 dark:text-amber-450 dark:border-amber-900/50'
-                                : 'bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-450 dark:border-emerald-900/50'
+                            ? 'bg-rose-100 text-rose-700 border border-rose-200 dark:bg-rose-950/30 dark:text-rose-450 dark:border-rose-900/50'
+                            : m.priority === 'medium'
+                              ? 'bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-950/30 dark:text-amber-450 dark:border-amber-900/50'
+                              : 'bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-450 dark:border-emerald-900/50'
                             }`}>
                             {m.priority}
                           </span>
@@ -693,10 +696,10 @@ export default function OwnerDashboardPage() {
 
                       <div className="flex flex-col items-end gap-1.5 shrink-0">
                         <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-[8px] sm:text-[9px] font-bold border ${m.status === 'resolved'
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-455'
-                            : m.status === 'in_progress'
-                              ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/20 dark:text-blue-455'
-                              : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/20 dark:text-amber-455'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-455'
+                          : m.status === 'in_progress'
+                            ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/20 dark:text-blue-455'
+                            : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/20 dark:text-amber-455'
                           }`}>
                           {m.status.replace('_', ' ')}
                         </span>
@@ -767,7 +770,7 @@ export default function OwnerDashboardPage() {
 
       {isInstallModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative animate-in zoom-in-95 duration-200 text-slate-900 dark:text-white">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative animate-in zoom-in-95 duration-200 text-slate-900 dark:text-white max-h-[90dvh] overflow-y-auto">
             <button
               onClick={() => setIsInstallModalOpen(false)}
               className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-650 dark:hover:text-slate-350"

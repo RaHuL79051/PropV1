@@ -8,6 +8,7 @@ import {
   User, CheckCircle2, History, Loader2, AlertCircle 
 } from 'lucide-react';
 import { VerificationLog } from '../../../../types';
+import { getApiErrorMessage } from '../../../../lib/apiError';
 
 export default function VerificationPage() {
   const showToast = useToastStore((state) => state.showToast);
@@ -84,7 +85,7 @@ export default function VerificationPage() {
       showToast('Verification check completed!', 'success');
       fetchLogs();
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Verification lookup failed.', 'error');
+      showToast(getApiErrorMessage(err, 'Verification lookup failed.'), 'error');
     } finally {
       setLoading(false);
     }
@@ -93,7 +94,7 @@ export default function VerificationPage() {
   return (
     <div className="space-y-8 animate-stagger">
       {/* Header Banner */}
-      <div className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-violet-600 via-purple-600 to-indigo-600 text-white shadow-xl">
+      <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white shadow-xl">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.15),transparent_50%)]" />
         <div className="absolute -bottom-8 -right-8 w-32 h-32 rounded-full bg-white/5 blur-2xl" />
         <div className="relative p-6 md:p-8">

@@ -7,6 +7,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useToastStore } from '../../store/toastStore';
 import api from '../../lib/api';
 import { Building2, Mail, Lock, Loader2, ArrowRight } from 'lucide-react';
+import { getApiErrorMessage } from '../../lib/apiError';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -39,7 +40,7 @@ export default function LoginPage() {
         router.push('/dashboard/owner');
       }
     } catch (err: any) {
-      const errMsg = err.response?.data?.message || 'Login failed. Please check your credentials.';
+      const errMsg = getApiErrorMessage(err, 'Login failed. Please check your credentials.');
       showToast(errMsg, 'error');
     } finally {
       setIsLoading(false);

@@ -8,6 +8,7 @@ import {
   UserPlus, Lock, ShieldCheck, Building2, Eye, EyeOff
 } from 'lucide-react';
 import { User } from '../../../../types';
+import { getApiErrorMessage } from '../../../../lib/apiError';
 
 export default function OwnersPage() {
   const showToast = useToastStore((state) => state.showToast);
@@ -32,7 +33,7 @@ export default function OwnersPage() {
       const res = await api.get('/auth/owners');
       setOwners(res.data);
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to fetch owners list', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to fetch owners list'), 'error');
     } finally {
       setIsLoading(false);
     }
@@ -56,7 +57,7 @@ export default function OwnersPage() {
         })
       );
     } catch (err: any) {
-      showToast(err.response?.data?.message || `Failed to update status to ${newStatus}`, 'error');
+      showToast(getApiErrorMessage(err, `Failed to update status to ${newStatus}`), 'error');
     } finally {
       setActionLoadingId(null);
     }
@@ -80,7 +81,7 @@ export default function OwnersPage() {
       setShowPassword(false);
       fetchOwners(); // Refresh the list
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to create user account', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to create user account'), 'error');
     } finally {
       setAddUserLoading(false);
     }
@@ -248,7 +249,7 @@ export default function OwnersPage() {
       {/* ── Add User Modal ── */}
       {isAddUserModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative animate-in zoom-in-95 duration-200">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative animate-in zoom-in-95 duration-200 max-h-[90dvh] overflow-y-auto">
             <button
               onClick={() => { setIsAddUserModalOpen(false); setShowPassword(false); setNewUser({ fullName: '', email: '', phone: '', password: '', role: 'owner' }); }}
               className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400"

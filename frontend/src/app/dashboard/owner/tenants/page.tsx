@@ -9,6 +9,7 @@ import {
   ArrowLeft, ArrowRight, Search, Mail, Send, Calendar, FolderOpen, Filter
 } from 'lucide-react';
 import { Tenant, Property, Room } from '../../../../types';
+import { getApiErrorMessage } from '../../../../lib/apiError';
 
 interface BillingStatus {
   totalTenants: number;
@@ -150,7 +151,7 @@ export default function TenantsPage() {
       setVerificationResult(res.data);
       showToast('Tenant verification report retrieved successfully', 'success');
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to retrieve verification report', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to retrieve verification report'), 'error');
     } finally {
       setAadhaarVerifying(false);
     }
@@ -169,7 +170,7 @@ export default function TenantsPage() {
       fetchBillingStatus();
       fetchPayments();
     } catch (activateErr: any) {
-      showToast(activateErr.response?.data?.message || 'Failed to activate connection', 'error');
+      showToast(getApiErrorMessage(activateErr, 'Failed to activate connection'), 'error');
     } finally {
       setIsReactivating(false);
       setReactivateAadhaar('');
@@ -245,12 +246,7 @@ export default function TenantsPage() {
         resetForm();
       }
     } catch (err: any) {
-      if (err.response?.data?.errors && Array.isArray(err.response.data.errors)) {
-        const details = err.response.data.errors.map((e: any) => `${e.field.replace('body.', '')}: ${e.message}`).join(', ');
-        showToast(`Validation failed: ${details}`, 'error');
-      } else {
-        showToast(err.response?.data?.message || 'Failed to send invitation link', 'error');
-      }
+      showToast(getApiErrorMessage(err, 'Failed to send invitation link'), 'error');
     } finally {
       setInviteSending(false);
     }
@@ -319,12 +315,7 @@ export default function TenantsPage() {
       setIsProfileModalOpen(false);
       fetchTenants();
     } catch (err: any) {
-      if (err.response?.data?.errors && Array.isArray(err.response.data.errors)) {
-        const details = err.response.data.errors.map((e: any) => `${e.field.replace('body.', '')}: ${e.message}`).join(', ');
-        showToast(`Validation failed: ${details}`, 'error');
-      } else {
-        showToast(err.response?.data?.message || 'Failed to update tenant profile', 'error');
-      }
+      showToast(getApiErrorMessage(err, 'Failed to update tenant profile'), 'error');
     } finally {
       setEditSubmitting(false);
     }
@@ -366,7 +357,7 @@ export default function TenantsPage() {
 
         fetchTenants();
       } catch (err: any) {
-        showToast(err.response?.data?.message || 'Failed to upload document', 'error');
+        showToast(getApiErrorMessage(err, 'Failed to upload document'), 'error');
       }
     };
 
@@ -403,7 +394,7 @@ export default function TenantsPage() {
 
       fetchTenants();
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to remove document', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to remove document'), 'error');
     }
   };
 
@@ -412,7 +403,7 @@ export default function TenantsPage() {
       const res = await api.get('/tenants');
       setTenants(res.data);
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to fetch tenants', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to fetch tenants'), 'error');
     }
   };
 
@@ -421,7 +412,7 @@ export default function TenantsPage() {
       const propsRes = await api.get('/properties');
       setProperties(propsRes.data);
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to fetch properties for allocation', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to fetch properties for allocation'), 'error');
       console.error('Failed to fetch allocation context', err);
     }
   };
@@ -481,12 +472,7 @@ export default function TenantsPage() {
       fetchBillingStatus();
       fetchPayments();
     } catch (err: any) {
-      if (err.response?.data?.errors && Array.isArray(err.response.data.errors)) {
-        const details = err.response.data.errors.map((e: any) => `${e.field.replace('body.', '')}: ${e.message}`).join(', ');
-        showToast(`Validation failed: ${details}`, 'error');
-      } else {
-        showToast(err.response?.data?.message || 'Failed to register tenant', 'error');
-      }
+      showToast(getApiErrorMessage(err, 'Failed to register tenant'), 'error');
     } finally {
       setSubmitting(false);
     }
@@ -519,7 +505,7 @@ export default function TenantsPage() {
       });
       fetchTenants();
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to add charge', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to add charge'), 'error');
     }
   };
 
@@ -535,7 +521,7 @@ export default function TenantsPage() {
       });
       fetchTenants();
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to remove charge', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to remove charge'), 'error');
     }
   };
 
@@ -552,7 +538,7 @@ export default function TenantsPage() {
       fetchTenants();
       fetchPayments();
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to send monthly bill', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to send monthly bill'), 'error');
     } finally {
       setIsBillingSending(false);
     }
@@ -610,7 +596,7 @@ export default function TenantsPage() {
       fetchBillingStatus();
       fetchPayments();
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to check out tenant', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to check out tenant'), 'error');
     } finally {
       setCheckoutSubmitting(false);
     }
@@ -633,7 +619,7 @@ export default function TenantsPage() {
       fetchBillingStatus();
       fetchPayments();
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to remove tenant', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to remove tenant'), 'error');
     } finally {
       setIsDeleting(false);
     }
@@ -697,20 +683,20 @@ export default function TenantsPage() {
       <div className="absolute top-40 -left-20 h-72 w-72 rounded-full bg-accent/10 blur-3xl pointer-events-none" />
 
       {/* Header Banner */}
-      <div className="rounded-3xl overflow-hidden border border-white/10 bg-gradient-to-r from-primary via-primary-hover to-accent text-white shadow-xl relative">
+      <div className="rounded-2xl overflow-hidden border border-white/10 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white shadow-xl relative">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.18),transparent_35%)]" />
         <div className="relative p-5 md:p-7 flex flex-col gap-3 md:gap-4 md:flex-row md:items-center md:justify-between">
           <div className="min-w-0">
-            <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-white/75">Tenant Operations</p>
-            <h2 className="text-xl md:text-2xl lg:text-3xl font-black tracking-tight mt-1">Tenants Directory</h2>
-            <p className="text-xs sm:text-sm text-white/80 mt-1.5 sm:mt-2 max-w-2xl">Manage and view all tenant profiles and statuses.</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/75">Tenant Operations</p>
+            <h2 className="text-xl md:text-2xl font-black tracking-tight mt-1">Tenants Directory</h2>
+            <p className="text-xs sm:text-sm text-white/80 mt-1">Manage and view all tenant profiles and statuses.</p>
           </div>
           <button
             onClick={() => {
               fetchAllocationData();
               setIsAddModalOpen(true);
             }}
-            className="inline-flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 rounded-full bg-white text-primary hover:bg-slate-100 text-xs sm:text-sm font-extrabold shadow-lg shadow-black/10 transition-all hover:scale-[1.02] shrink-0"
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-white/15 hover:bg-white/25 border border-white/20 text-white text-xs sm:text-sm font-bold shadow-md backdrop-blur-sm transition-all hover:scale-105 shrink-0"
           >
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">Add New Tenant</span><span className="sm:hidden">Add Tenant</span>
@@ -1123,7 +1109,7 @@ export default function TenantsPage() {
       {/* Add Tenant Modal */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 pb-24 sm:pb-6 relative max-h-[85vh] sm:max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
+          <div className="w-full max-w-xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 pb-24 sm:pb-6 relative max-h-[85dvh] sm:max-h-[90dvh] overflow-y-auto animate-in zoom-in-95 duration-200">
             <button
               onClick={() => {
                 setIsAddModalOpen(false);
@@ -1672,7 +1658,7 @@ export default function TenantsPage() {
       {/* Checkout Modal */}
       {isCheckoutModalOpen && selectedTenantForCheckout && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative">
+          <div className="w-full max-w-md bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative max-h-[90dvh] overflow-y-auto">
             <button
               onClick={() => setIsCheckoutModalOpen(false)}
               className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
@@ -1734,7 +1720,7 @@ export default function TenantsPage() {
       {/* Profile & Document Management Modal */}
       {isProfileModalOpen && selectedTenantForProfile && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-4xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative max-h-[90vh] overflow-y-auto">
+          <div className="w-full max-w-4xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative max-h-[90dvh] overflow-y-auto">
             <button
               onClick={() => setIsProfileModalOpen(false)}
               className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
@@ -1918,7 +1904,7 @@ export default function TenantsPage() {
                           );
                           showToast('Tenant verified successfully!', 'success');
                         } catch (err: any) {
-                          showToast(err.response?.data?.message || 'Failed to verify tenant', 'error');
+                          showToast(getApiErrorMessage(err, 'Failed to verify tenant'), 'error');
                         }
                       }}
                       className="mt-2 w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md transition-all flex items-center justify-center gap-1"

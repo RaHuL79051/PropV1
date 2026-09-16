@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { VerificationLog } from '../../../types';
+import { getApiErrorMessage } from '../../../lib/apiError';
 
 interface AdminStats {
   totalOwners: number;
@@ -96,7 +97,7 @@ export default function AdminDashboardPage() {
       const res = await api.get('/dashboard/admin');
       setStats(res.data);
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to fetch admin stats', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to fetch admin stats'), 'error');
     } finally {
       setIsLoading(false);
     }
@@ -124,7 +125,7 @@ export default function AdminDashboardPage() {
       await api.put('/settings/default_lease_terms', { value: defaultTerms });
       showToast('Default lease terms updated successfully!', 'success');
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to update lease terms', 'error');
+      showToast(getApiErrorMessage(err, 'Failed to update lease terms'), 'error');
     } finally {
       setIsSavingTerms(false);
     }
@@ -492,7 +493,7 @@ export default function AdminDashboardPage() {
 
       {isInstallModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative animate-in zoom-in-95 duration-200 text-slate-900 dark:text-white">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 relative animate-in zoom-in-95 duration-200 text-slate-900 dark:text-white max-h-[90dvh] overflow-y-auto">
             <button
               onClick={() => setIsInstallModalOpen(false)}
               className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-650 dark:hover:text-slate-350"

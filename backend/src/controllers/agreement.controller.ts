@@ -7,6 +7,20 @@ import { AppError } from '../middleware/errorHandler.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import PDFDocument from 'pdfkit';
 
+// Agreement access follows the live owner-tenant link, not the tenant record's
+// original creator, so tenants who have moved between owners resolve correctly.
+const assertAgreementAccess = async (req: AuthenticatedRequest, tenantId: any, action: string) => {
+  if (req.user?.role === 'admin') return;
+  const connection = await TenantOwnerConnection.findOne({
+    tenant: tenantId,
+    owner: req.user?.userId,
+    isDeleted: false
+  });
+  if (!connection) {
+    throw new AppError(`Unauthorized attempt to ${action}`, 403);
+  }
+};
+
 export const createAgreement = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const {
@@ -25,6 +39,17 @@ export const createAgreement = async (req: AuthenticatedRequest, res: Response, 
       throw new AppError('Tenant not found', 404);
     }
 
+    await assertAgreementAccess(req, tenantRecord._id, 'create an agreement for this tenant');
+
+    const parsedStart = new Date(startDate);
+    const parsedEnd = new Date(endDate);
+    if (isNaN(parsedStart.getTime()) || isNaN(parsedEnd.getTime())) {
+      throw new AppError('Valid start and end dates are required', 400);
+    }
+    if (parsedEnd <= parsedStart) {
+      throw new AppError('The agreement end date must be after the start date', 400);
+    }
+
     const defaultLeaseSetting = await Setting.findOne({ key: 'default_lease_terms' });
     const defaultTerms = defaultLeaseSetting?.value || 'Standard tenancy terms and conditions apply. The tenant agrees to maintain the property in good condition, pay rent by the due date, and adhere to local housing regulations.';
 
@@ -32,8 +57,8 @@ export const createAgreement = async (req: AuthenticatedRequest, res: Response, 
       tenant,
       property,
       room,
-      startDate: new Date(startDate),
-      endDate: new Date(endDate),
+      startDate: parsedStart,
+      endDate: parsedEnd,
       monthlyRent,
       securityDeposit,
       termsAndConditions: defaultTerms,
@@ -97,11 +122,7 @@ export const getAgreementById = async (req: AuthenticatedRequest, res: Response,
       throw new AppError('Agreement not found', 404);
     }
 
-    // Auth check
-    const tenantOwner = (agreement.tenant as any).owner.toString();
-    if (req.user?.role !== 'admin' && tenantOwner !== req.user?.userId) {
-      throw new AppError('Unauthorized access to agreement details', 403);
-    }
+    await assertAgreementAccess(req, (agreement.tenant as any)._id, 'view this agreement');
 
     return res.status(200).json(agreement);
   } catch (error) {
@@ -117,6 +138,8 @@ export const terminateAgreement = async (req: AuthenticatedRequest, res: Respons
     if (!agreement) {
       throw new AppError('Agreement not found', 404);
     }
+
+    await assertAgreementAccess(req, (agreement.tenant as any)?._id, 'terminate this agreement');
 
     agreement.status = 'expired';
     await agreement.save();
@@ -153,9 +176,7 @@ export const downloadAgreementPdf = async (req: AuthenticatedRequest, res: Respo
       throw new AppError('Tenant associated with agreement not found', 404);
     }
     
-    if (req.user?.role !== 'admin' && tenantRecord.owner.toString() !== req.user?.userId) {
-      throw new AppError('Unauthorized access to agreement PDF', 403);
-    }
+    await assertAgreementAccess(req, tenantRecord._id, 'download this agreement');
 
     // Set Response headers
     res.setHeader('Content-Type', 'application/pdf');
@@ -244,9 +265,7 @@ export const deleteAgreement = async (req: AuthenticatedRequest, res: Response, 
       throw new AppError('Tenant associated with agreement not found', 404);
     }
 
-    if (req.user?.role !== 'admin' && tenantRecord.owner.toString() !== req.user?.userId) {
-      throw new AppError('Unauthorized to delete this agreement', 403);
-    }
+    await assertAgreementAccess(req, tenantRecord._id, 'delete this agreement');
 
     // Reset tenant agreementStatus to pending
     tenantRecord.agreementStatus = 'pending';
