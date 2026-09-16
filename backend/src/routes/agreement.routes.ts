@@ -4,7 +4,7 @@ import {
   getAgreements,
   getAgreementById,
   terminateAgreement,
-  downloadAgreementPdf,
+  downloadAgreementPdf, 
   deleteAgreement
 } from '../controllers/agreement.controller.js';
 import { validate } from '../middleware/validator.js';
