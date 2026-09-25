@@ -1,0 +1,14 @@
+{
+  "name": "proptenant-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build:backend": "cd backend && npm install && npx prisma generate",
+    "build:frontend": "cd frontend && npm install && npm run build",
+    "build": "npm run build:backend && npm run build:frontend"
+  },
+  "devDependencies": {
+    "@vercel/node": "^5.1.11",
+    "typescript": "^5.4.5"
+  }
+}
