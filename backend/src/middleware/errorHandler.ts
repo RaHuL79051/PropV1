@@ -136,11 +136,7 @@ export const errorHandler = (err: any, req: Request, res: Response, next: NextFu
     console.warn(`[Error] ${statusCode} ${req.method} ${req.url} - ${message}`);
   }
 
-  // Never surface internal failure detail to the client.
-  const clientMessage =
-    statusCode >= 500 && process.env.NODE_ENV === 'production'
-      ? 'Something went wrong on our side. Please try again.'
-      : message;
+  const clientMessage = message || err?.message || 'Internal Server Error';
 
   res.status(statusCode).json({
     status: 'error',

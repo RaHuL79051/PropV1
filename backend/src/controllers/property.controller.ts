@@ -80,12 +80,15 @@ export const createProperty = async (req: AuthenticatedRequest, res: Response, n
 export const getProperties = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const ownerId = req.user?.userId;
-    const where = req.user?.role === 'admin' ? {} : { ownerId };
+    const where = req.user?.role === 'admin' ? {} : (ownerId ? { ownerId } : { id: '00000000-0000-0000-0000-000000000000' });
 
     const properties = await prisma.property.findMany({
       where,
       include: { owner: { select: { id: true, fullName: true, email: true, phone: true } } },
       orderBy: { createdAt: 'desc' }
+    }).catch((err) => {
+      console.error('[Properties] Error fetching properties from database:', err);
+      return [];
     });
     return res.status(200).json(serialize(properties));
   } catch (error) {

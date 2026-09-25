@@ -202,29 +202,29 @@ export const getAdminDashboardStats = async (req: AuthenticatedRequest, res: Res
       recentProperties,
       recentMaintenance
     ] = await Promise.all([
-      prisma.user.count({ where: { role: 'owner' } }),
-      prisma.property.count(),
-      prisma.room.count(),
-      prisma.bed.count(),
-      prisma.bed.count({ where: { isOccupied: true } }),
-      prisma.tenant.count({ where: { assignedBedId: { not: null } } }),
-      prisma.agreement.count({ where: { status: 'active' } }),
-      prisma.payment.findMany({ where: { status: 'paid' } }),
-      prisma.expense.findMany(),
-      prisma.verificationLog.count({ where: { riskLevel: 'high' } }),
+      prisma.user.count({ where: { role: 'owner' } }).catch(() => 0),
+      prisma.property.count().catch(() => 0),
+      prisma.room.count().catch(() => 0),
+      prisma.bed.count().catch(() => 0),
+      prisma.bed.count({ where: { isOccupied: true } }).catch(() => 0),
+      prisma.tenant.count({ where: { assignedBedId: { not: null } } }).catch(() => 0),
+      prisma.agreement.count({ where: { status: 'active' } }).catch(() => 0),
+      prisma.payment.findMany({ where: { status: 'paid' } }).catch(() => []),
+      prisma.expense.findMany().catch(() => []),
+      prisma.verificationLog.count({ where: { riskLevel: 'high' } }).catch(() => 0),
       prisma.verificationLog.findMany({
         include: { requester: { select: { id: true, fullName: true, email: true } } },
         orderBy: { createdAt: 'desc' },
         take: 6
-      }),
-      prisma.maintenanceRequest.count(),
-      prisma.maintenanceRequest.count({ where: { status: { in: ['pending', 'in_progress'] } } }),
-      prisma.payment.findMany({ where: { status: { in: ['unpaid', 'overdue'] } } }),
+      }).catch(() => []),
+      prisma.maintenanceRequest.count().catch(() => 0),
+      prisma.maintenanceRequest.count({ where: { status: { in: ['pending', 'in_progress'] } } }).catch(() => 0),
+      prisma.payment.findMany({ where: { status: { in: ['unpaid', 'overdue'] } } }).catch(() => []),
       prisma.property.findMany({
         include: { owner: { select: { id: true, fullName: true, email: true } } },
         orderBy: { createdAt: 'desc' },
         take: 5
-      }),
+      }).catch(() => []),
       prisma.maintenanceRequest.findMany({
         include: {
           tenant: { select: { id: true, fullName: true } },
@@ -232,7 +232,7 @@ export const getAdminDashboardStats = async (req: AuthenticatedRequest, res: Res
         },
         orderBy: { createdAt: 'desc' },
         take: 5
-      })
+      }).catch(() => [])
     ]);
 
     // Total Revenue Platform Wide
