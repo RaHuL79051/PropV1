@@ -114,9 +114,62 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/settings', settingRoutes);
 app.use('/api/expenses', expenseRoutes);
 
-// Base route
-app.get('/health', (req, res) => {
+import bcrypt from 'bcrypt';
+import prisma from './lib/prisma.js';
+
+// Base and Seed routes
+app.get(['/health', '/api/health'], (req, res) => {
   res.status(200).json({ status: 'OK', timestamp: new Date() });
+});
+
+app.get('/api/seed', async (req, res, next) => {
+  try {
+    const logs: string[] = [];
+    
+    // Seed admin
+    const adminExists = await prisma.user.findFirst({ where: { role: 'admin' } });
+    if (!adminExists) {
+      const passwordHash = await bcrypt.hash('admin123', 10);
+      await prisma.user.create({
+        data: {
+          fullName: 'System Admin',
+          email: 'admin@proptenant.com',
+          phone: '9999999999',
+          passwordHash,
+          role: 'admin',
+          status: 'approved',
+          isActive: true,
+          paidBeds: 0
+        }
+      });
+      logs.push('Default admin user created: admin@proptenant.com / admin123');
+    } else {
+      logs.push('Admin user already exists');
+    }
+
+    // Seed settings
+    const termsExist = await prisma.setting.findUnique({ where: { key: 'default_lease_terms' } });
+    if (!termsExist) {
+      await prisma.setting.create({
+        data: {
+          key: 'default_lease_terms',
+          value: `1. RENT PAYMENT: Rent is payable in advance on or before the 5th day of every calendar month.
+2. MAINTENANCE: The occupant shall keep the premises, rooms, and common areas in a clean, hygienic, and undamaged condition.
+3. SUB-LEASING: The occupant shall not sublet or assign the whole or any part of the premises to any other person.
+4. PEACE AND QUIET: Occupants must maintain peace and order, keeping noise levels low. No illegal activities are permitted on the premises.
+5. TERMINATION NOTICE: Either party can terminate this agreement by giving 30 days notice to the other party.`,
+          description: 'Standard lease terms and covenants applied to all agreements by default.'
+        }
+      });
+      logs.push('Default lease terms seeded successfully.');
+    } else {
+      logs.push('Default lease terms already exists');
+    }
+
+    res.status(200).json({ success: true, message: 'Database seeded successfully', logs });
+  } catch (error) {
+    next(error);
+  }
 });
 
 // Unknown routes answer in JSON, then the global error handler formats everything else.
