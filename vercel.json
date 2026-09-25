@@ -1,11 +1,16 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
-  "buildCommand": "npm run build",
-  "outputDirectory": "frontend/.next",
-  "rewrites": [
+  "framework": "nextjs",
+  "functions": {
+    "src/pages/api/[...path].ts": {
+      "maxDuration": 30
+    }
+  },
+  "crons": [
     {
-      "source": "/api/:path*",
-      "destination": "/api"
+      "path": "/api/cron/monthly-billing",
+      "schedule": "0 3 * * *"
     }
   ]
 }

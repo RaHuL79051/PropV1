@@ -1,19 +1,67 @@
 {
-  "name": "proptenant-monorepo",
-  "version": "1.0.0",
+  "name": "proptenant",
+  "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build:backend": "cd backend && npm install --include=dev && npx prisma generate",
-    "build:frontend": "cd frontend && npm install --include=dev && npm run build",
-    "build": "npm run build:backend && npm run build:frontend"
+    "dev": "next dev --turbopack",
+    "build": "prisma generate && prisma migrate deploy && next build",
+    "start": "next start",
+    "lint": "eslint",
+    "postinstall": "prisma generate",
+    "prisma:studio": "prisma studio",
+    "prisma:deploy": "prisma migrate deploy"
   },
   "dependencies": {
+    "@prisma/client": "^6.19.3",
+    "@tailwindcss/postcss": "^4",
+    "axios": "^1.16.1",
+    "bcrypt": "^5.1.1",
+    "compression": "^1.7.4",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.2.0",
+    "framer-motion": "^12.39.0",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "lucide-react": "^1.16.0",
     "next": "^15.5.25",
+    "nodemailer": "^10.0.10",
+    "pdfkit": "^0.18.0",
+    "razorpay": "^2.9.6",
     "react": "19.1.0",
-    "react-dom": "19.1.0"
+    "react-dom": "19.1.0",
+    "react-hook-form": "^7.76.0",
+    "recharts": "^3.8.1",
+    "resend": "^6.12.4",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "zod": "^3.22.4",
+    "zustand": "^5.0.13"
   },
   "devDependencies": {
-    "@vercel/node": "^5.1.11",
-    "typescript": "^5.4.5"
+    "@eslint/eslintrc": "^3",
+    "@types/bcrypt": "^5.0.2",
+    "@types/compression": "^1.7.5",
+    "@types/cookie-parser": "^1.4.7",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/node": "^20",
+    "@types/nodemailer": "^6.4.17",
+    "@types/pdfkit": "^0.17.6",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "15.5.18",
+    "prisma": "^6.19.3"
+  },
+  "allowScripts": {
+    "@prisma/client@6.19.3": true,
+    "bcrypt@5.1.1": true,
+    "prisma@6.19.3": true,
+    "unrs-resolver@1.12.2": true,
+    "@prisma/engines@6.19.3": true
   }
 }
