@@ -73,8 +73,8 @@ export const getOwnerDashboardStats = async (req: AuthenticatedRequest, res: Res
     const vacantBeds = totalBeds - occupiedBeds;
 
     // 4. Calculations
-    const totalRevenue = paidPayments.reduce((sum, p) => sum + p.amount, 0);
-    const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
+    const totalRevenue = paidPayments.reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
+    const totalExpenses = expenses.reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
 
     // Current Month Revenue and Expenses
     const now = new Date();
@@ -87,7 +87,7 @@ export const getOwnerDashboardStats = async (req: AuthenticatedRequest, res: Res
         const pDate = new Date(p.paymentDate);
         return pDate >= startOfMonth && pDate <= endOfMonth;
       })
-      .reduce((sum, p) => sum + p.amount, 0);
+      .reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
 
     const monthlyExpenses = expenses
       .filter((e) => {
@@ -95,10 +95,10 @@ export const getOwnerDashboardStats = async (req: AuthenticatedRequest, res: Res
         const eDate = new Date(e.date);
         return eDate >= startOfMonth && eDate <= endOfMonth;
       })
-      .reduce((sum, e) => sum + e.amount, 0);
+      .reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
 
     const pendingPaymentsCount = pendingPayments.length;
-    const pendingPaymentsAmount = pendingPayments.reduce((sum, p) => sum + p.amount, 0);
+    const pendingPaymentsAmount = pendingPayments.reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
 
     const pendingMaintenanceCount = maintenanceRequests.filter((r) => r.status === 'pending' || r.status === 'in_progress').length;
     const totalMaintenanceCount = maintenanceRequests.length;
@@ -134,7 +134,7 @@ export const getOwnerDashboardStats = async (req: AuthenticatedRequest, res: Res
           const pDate = new Date(p.paymentDate);
           return pDate >= startOfM && pDate <= endOfM;
         })
-        .reduce((sum, p) => sum + p.amount, 0);
+        .reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
 
       const exp = expenses
         .filter((e) => {
@@ -142,7 +142,7 @@ export const getOwnerDashboardStats = async (req: AuthenticatedRequest, res: Res
           const eDate = new Date(e.date);
           return eDate >= startOfM && eDate <= endOfM;
         })
-        .reduce((sum, e) => sum + e.amount, 0);
+        .reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
 
       monthlyChartData.push({
         month: monthName,
@@ -236,14 +236,14 @@ export const getAdminDashboardStats = async (req: AuthenticatedRequest, res: Res
     ]);
 
     // Total Revenue Platform Wide
-    const totalRevenue = allPaidPayments.reduce((sum, p) => sum + p.amount, 0);
+    const totalRevenue = (allPaidPayments as any[]).reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
 
     // Platform Expenses
-    const totalExpenses = allExpenses.reduce((sum, e) => sum + e.amount, 0);
+    const totalExpenses = (allExpenses as any[]).reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
 
     // Platform-wide pending payments
     const pendingPaymentsCount = pendingPayments.length;
-    const pendingPaymentsAmount = pendingPayments.reduce((sum, p) => sum + p.amount, 0);
+    const pendingPaymentsAmount = (pendingPayments as any[]).reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
 
     // Real monthly chart data platform-wide (last 6 months) calculated in memory
     const monthlyChartData = [];
@@ -260,21 +260,21 @@ export const getAdminDashboardStats = async (req: AuthenticatedRequest, res: Res
       const startOfM = new Date(year, monthIndex, 1);
       const endOfM = new Date(year, monthIndex + 1, 0, 23, 59, 59, 999);
 
-      const rev = allPaidPayments
-        .filter((p) => {
+      const rev = (allPaidPayments as any[])
+        .filter((p: any) => {
           if (!p.paymentDate) return false;
           const pDate = new Date(p.paymentDate);
           return pDate >= startOfM && pDate <= endOfM;
         })
-        .reduce((sum, p) => sum + p.amount, 0);
+        .reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
 
-      const exp = allExpenses
-        .filter((e) => {
+      const exp = (allExpenses as any[])
+        .filter((e: any) => {
           if (!e.date) return false;
           const eDate = new Date(e.date);
           return eDate >= startOfM && eDate <= endOfM;
         })
-        .reduce((sum, e) => sum + e.amount, 0);
+        .reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
 
       monthlyChartData.push({
         month: monthName,
