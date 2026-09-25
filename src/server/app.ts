@@ -21,6 +21,9 @@ import cronRoutes from './routes/cron.routes';
 
 const app = express();
 
+// Enable trust proxy when behind proxies/load balancers (e.g. ngrok, Vercel, Nginx)
+app.set('trust proxy', 1);
+
 // Security and utility middlewares
 app.use(helmet());
 app.use(compression());
