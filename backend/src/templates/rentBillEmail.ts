@@ -69,7 +69,7 @@ export const buildRentBillEmail = ({
           </div>
 
           <div style="margin-top:24px;text-align:center">
-            <span style="display:inline-block;background:#2563eb;color:#ffffff;padding:12px 20px;border-radius:14px;font-size:13px;font-weight:800;box-shadow:0 8px 16px rgba(37,99,235,.2)">Invoice Ref: ${paymentId.substring(18)}</span>
+            <span style="display:inline-block;background:#2563eb;color:#ffffff;padding:12px 20px;border-radius:14px;font-size:13px;font-weight:800;box-shadow:0 8px 16px rgba(37,99,235,.2)">Invoice Ref: ${paymentId.slice(-6).toUpperCase()}</span>
           </div>
         </div>
 

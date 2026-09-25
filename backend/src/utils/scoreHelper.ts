@@ -1,6 +1,4 @@
-import Tenant from '../models/Tenant.js';
-import TenantReview from '../models/TenantReview.js';
-import Payment from '../models/Payment.js';
+import prisma from '../lib/prisma.js';
 
 export interface ScoreDetails {
   score: number;
@@ -22,7 +20,7 @@ export const updateTenantStatsByAadhaar = async (aadhaarNumber: string): Promise
   let score = 700; // Base score
 
   // 1. Fetch reviews from TenantReview
-  const reviews = await TenantReview.find({ aadhaarNumber });
+  const reviews = await prisma.tenantReview.findMany({ where: { aadhaarNumber } });
   const feedbacks: string[] = [];
   let totalRatingSum = 0;
 
@@ -48,10 +46,10 @@ export const updateTenantStatsByAadhaar = async (aadhaarNumber: string): Promise
     : 5.0;
 
   // 2. Fetch payments for all tenant records with this Aadhaar
-  const tenants = await Tenant.find({ aadhaarNumber }).select('_id');
-  const tenantIds = tenants.map((t) => t._id);
+  const tenants = await prisma.tenant.findMany({ where: { aadhaarNumber }, select: { id: true } });
+  const tenantIds = tenants.map((t) => t.id);
 
-  const payments = await Payment.find({ tenant: { $in: tenantIds } });
+  const payments = await prisma.payment.findMany({ where: { tenantId: { in: tenantIds } } });
   const now = new Date();
 
   for (const payment of payments) {
@@ -87,17 +85,15 @@ export const updateTenantStatsByAadhaar = async (aadhaarNumber: string): Promise
   }
 
   // 5. Update all matching Tenant records in the database
-  await Tenant.updateMany(
-    { aadhaarNumber },
-    {
-      $set: {
-        creditScore: score,
-        tenantRating: averageRating,
-        riskLevel,
-        previousOwnerFeedback: feedbacks
-      }
+  await prisma.tenant.updateMany({
+    where: { aadhaarNumber },
+    data: {
+      creditScore: score,
+      tenantRating: averageRating,
+      riskLevel,
+      previousOwnerFeedback: feedbacks
     }
-  );
+  });
 
   return {
     score,

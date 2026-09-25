@@ -1,44 +1,44 @@
-import Tenant from '../models/Tenant.js';
-import TenantOwnerConnection from '../models/TenantOwnerConnection.js';
-import Room from '../models/Room.js';
-import Payment from '../models/Payment.js';
+import prisma from '../lib/prisma.js';
 import { sendMail } from './mailer.js';
 import { buildRentBillEmail } from '../templates/rentBillEmail.js';
 
 export const generateAndSendMonthlyBills = async () => {
   try {
     console.log('[Scheduler] Starting monthly rent invoice generation and email dispatch...');
-    
+
     const now = new Date();
     const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
 
     // Find all active connections (not deleted)
-    const connections = await TenantOwnerConnection.find({ isDeleted: false })
-      .populate({
-        path: 'tenant',
-        populate: [
-          { path: 'assignedProperty', select: 'propertyName address' },
-          { path: 'assignedRoom', select: 'roomNumber monthlyRent roomType bedCapacity' }
-        ]
-      })
-      .populate('owner');
+    const connections = await prisma.tenantOwnerConnection.findMany({
+      where: { isDeleted: false },
+      include: {
+        tenant: {
+          include: {
+            assignedRoom: true,
+            additionalCharges: true
+          }
+        },
+        owner: true
+      }
+    });
 
     const processedTenantIds = new Set<string>();
     let count = 0;
 
     for (const conn of connections) {
-      const tenant = conn.tenant as any;
-      const owner = conn.owner as any;
-      
-      if (!tenant || !tenant.email || processedTenantIds.has(tenant._id.toString())) {
+      const tenant = conn.tenant;
+      const owner = conn.owner;
+
+      if (!tenant || !tenant.email || processedTenantIds.has(tenant.id)) {
         continue;
       }
 
-      processedTenantIds.add(tenant._id.toString());
+      processedTenantIds.add(tenant.id);
 
       // Only tenants who currently occupy a room owe rent.
-      if (!tenant.assignedRoom) {
+      if (!tenant.assignedRoomId || !tenant.assignedRoom) {
         continue;
       }
 
@@ -52,10 +52,12 @@ export const generateAndSendMonthlyBills = async () => {
       }
 
       // Guard against a second run in the same month (for example after a restart).
-      const alreadyBilled = await Payment.findOne({
-        tenant: tenant._id,
-        dueDate: { $gte: periodStart, $lte: periodEnd },
-        notes: { $regex: '^Rent Invoice for' }
+      const alreadyBilled = await prisma.payment.findFirst({
+        where: {
+          tenantId: tenant.id,
+          dueDate: { gte: periodStart, lte: periodEnd },
+          notes: { startsWith: 'Rent Invoice for' }
+        }
       });
       if (alreadyBilled) {
         continue;
@@ -71,7 +73,7 @@ export const generateAndSendMonthlyBills = async () => {
       }
 
       const additionalCharges = tenant.additionalCharges || [];
-      const additionalTotal = additionalCharges.reduce((sum: number, c: any) => sum + c.amount, 0);
+      const additionalTotal = additionalCharges.reduce((sum, c) => sum + c.amount, 0);
       const totalAmount = baseRent + additionalTotal;
 
       // Skip if total amount is 0 or negative
@@ -89,21 +91,23 @@ export const generateAndSendMonthlyBills = async () => {
       // Build breakdown notes
       let description = `Rent Invoice for ${currentMonthName} ${currentYear}.\nBase Rent: ₹${baseRent}\n`;
       if (additionalCharges.length > 0) {
-        description += `Additional Charges:\n` + additionalCharges.map((c: any) => `- ${c.description}: ₹${c.amount}`).join('\n') + `\n`;
+        description += `Additional Charges:\n` + additionalCharges.map((c) => `- ${c.description}: ₹${c.amount}`).join('\n') + `\n`;
       }
       description += `Total: ₹${totalAmount}`;
 
       // 1. Create a Payment (Invoice) record
-      const payment = await Payment.create({
-        tenant: tenant._id,
-        property: tenant.assignedProperty?._id || null,
-        room: tenant.assignedRoom?._id || null,
-        amount: totalAmount,
-        dueDate,
-        status: 'unpaid',
-        paymentMethod: 'none',
-        transactionId: null,
-        notes: description
+      const payment = await prisma.payment.create({
+        data: {
+          tenantId: tenant.id,
+          propertyId: tenant.assignedPropertyId,
+          roomId: tenant.assignedRoomId,
+          amount: totalAmount,
+          dueDate,
+          status: 'unpaid',
+          paymentMethod: 'none',
+          transactionId: null,
+          notes: description
+        }
       });
 
       // 2. Send email to tenant
@@ -115,7 +119,7 @@ export const generateAndSendMonthlyBills = async () => {
         baseRent,
         additionalCharges,
         totalAmount,
-        paymentId: payment._id.toString()
+        paymentId: payment.id
       });
 
       try {
@@ -131,10 +135,8 @@ export const generateAndSendMonthlyBills = async () => {
       }
 
       // 3. Clear additionalCharges from tenant record
-      await Tenant.findByIdAndUpdate(tenant._id, {
-        $set: { additionalCharges: [] }
-      });
-      
+      await prisma.tenantAdditionalCharge.deleteMany({ where: { tenantId: tenant.id } });
+
       count++;
     }
 

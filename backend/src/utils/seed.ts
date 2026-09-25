@@ -1,60 +1,53 @@
-import mongoose from 'mongoose';
 import bcrypt from 'bcrypt';
 import dotenv from 'dotenv';
-import User from '../models/User.js';
-import Property from '../models/Property.js';
-import Room from '../models/Room.js';
-import Bed from '../models/Bed.js';
-import Tenant from '../models/Tenant.js';
-import Agreement from '../models/Agreement.js';
-import Payment from '../models/Payment.js';
-import VerificationLog from '../models/VerificationLog.js';
-import MaintenanceRequest from '../models/MaintenanceRequest.js';
+import prisma from '../lib/prisma.js';
 
 dotenv.config();
-
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/proptenant';
 
 const seedData = async () => {
   try {
     console.log('Connecting to database...');
-    await mongoose.connect(MONGODB_URI);
-    console.log('Connected. Clearing old collections...');
+    await prisma.$connect();
+    console.log('Connected. Clearing old tables...');
 
-    await User.deleteMany({});
-    await Property.deleteMany({});
-    await Room.deleteMany({});
-    await Bed.deleteMany({});
-    await Tenant.deleteMany({});
-    await Agreement.deleteMany({});
-    await Payment.deleteMany({});
-    await VerificationLog.deleteMany({});
-    await MaintenanceRequest.deleteMany({});
+    await prisma.user.deleteMany({});
+    await prisma.property.deleteMany({});
+    await prisma.room.deleteMany({});
+    await prisma.bed.deleteMany({});
+    await prisma.tenant.deleteMany({});
+    await prisma.agreement.deleteMany({});
+    await prisma.payment.deleteMany({});
+    await prisma.verificationLog.deleteMany({});
+    await prisma.maintenanceRequest.deleteMany({});
 
-    console.log('Collections cleared. Generating password hashes...');
+    console.log('Tables cleared. Generating password hashes...');
     const hashedAdminPassword = await bcrypt.hash('admin123', 10);
     const hashedOwnerPassword = await bcrypt.hash('owner123', 10);
 
     // 1. Create Users
     console.log('Creating Admin and Owner users...');
-    const admin = await User.create({
-      fullName: 'System Admin',
-      email: 'admin@proptenant.com',
-      phone: '9999988888',
-      passwordHash: hashedAdminPassword,
-      role: 'admin',
-      status: 'approved',
-      isActive: true
+    await prisma.user.create({
+      data: {
+        fullName: 'System Admin',
+        email: 'admin@proptenant.com',
+        phone: '9999988888',
+        passwordHash: hashedAdminPassword,
+        role: 'admin',
+        status: 'approved',
+        isActive: true
+      }
     });
 
-    const owner = await User.create({
-      fullName: 'Rahul Sharma',
-      email: 'owner@proptenant.com',
-      phone: '8888877777',
-      passwordHash: hashedOwnerPassword,
-      role: 'owner',
-      status: 'approved',
-      isActive: true
+    await prisma.user.create({
+      data: {
+        fullName: 'Rahul Sharma',
+        email: 'owner@proptenant.com',
+        phone: '8888877777',
+        passwordHash: hashedOwnerPassword,
+        role: 'owner',
+        status: 'approved',
+        isActive: true
+      }
     });
     console.log('Database seeded successfully!');
     process.exit(0);

@@ -1,16 +1,17 @@
 import { Request, Response, NextFunction } from 'express';
-import Setting from '../models/Setting.js';
+import prisma from '../lib/prisma.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
+import { serialize } from '../utils/serialize.js';
 
 export const getSettingByKey = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { key } = req.params;
-    const setting = await Setting.findOne({ key });
+    const setting = await prisma.setting.findUnique({ where: { key } });
     if (!setting) {
       throw new AppError(`No setting named "${key}" exists.`, 404);
     }
-    return res.status(200).json(setting);
+    return res.status(200).json(serialize(setting));
   } catch (error) {
     next(error);
   }
@@ -21,21 +22,18 @@ export const updateSettingByKey = async (req: AuthenticatedRequest, res: Respons
     const { key } = req.params;
     const { value, description } = req.body;
 
-    let setting = await Setting.findOne({ key });
-    if (!setting) {
-      setting = new Setting({ key, value, description });
-    } else {
-      setting.value = value;
-      if (description !== undefined) {
-        setting.description = description;
+    const setting = await prisma.setting.upsert({
+      where: { key },
+      create: { key, value, description },
+      update: {
+        value,
+        ...(description !== undefined ? { description } : {})
       }
-    }
-
-    await setting.save();
+    });
 
     return res.status(200).json({
       message: `Setting ${key} updated successfully`,
-      setting
+      setting: serialize(setting)
     });
   } catch (error) {
     next(error);

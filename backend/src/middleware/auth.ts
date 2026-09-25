@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyAccessToken } from '../utils/jwt.js';
-import User from '../models/User.js';
+import prisma from '../lib/prisma.js';
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -38,7 +38,7 @@ export const authenticate = async (req: AuthenticatedRequest, res: Response, nex
     }
 
     // Validate that user exists in database and is active
-    const user = await User.findById(decoded.userId);
+    const user = await prisma.user.findUnique({ where: { id: decoded.userId } });
     if (!user) {
       return res.status(401).json({
         status: 'error',

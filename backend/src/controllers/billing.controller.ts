@@ -1,10 +1,5 @@
 import { Response, NextFunction } from 'express';
-import Property from '../models/Property.js';
-import Room from '../models/Room.js';
-import Bed from '../models/Bed.js';
-import User from '../models/User.js';
-import Tenant from '../models/Tenant.js';
-import TenantOwnerConnection from '../models/TenantOwnerConnection.js';
+import prisma from '../lib/prisma.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import Razorpay from 'razorpay';
@@ -30,12 +25,12 @@ const buildMockOrderResponse = (ownerId: string, amountDue: number) => {
 export const canAssignTenant = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const ownerId = req.user?.userId;
-    const owner = await User.findById(ownerId);
+    const owner = await prisma.user.findUnique({ where: { id: ownerId! } });
     if (!owner) {
       throw new AppError('Owner not found', 404);
     }
 
-    const totalTenants = await TenantOwnerConnection.countDocuments({ owner: ownerId, isDeleted: false });
+    const totalTenants = await prisma.tenantOwnerConnection.count({ where: { ownerId, isDeleted: false } });
     const paidLimit = (owner.paidBeds || 0) + 2;
     const canAssign = totalTenants <= paidLimit;
     const amountDue = Math.max(0, totalTenants - paidLimit) * 20;
@@ -54,13 +49,13 @@ export const canAssignTenant = async (req: AuthenticatedRequest, res: Response, 
 export const getBedBillingStatus = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const ownerId = req.user?.userId;
-    const owner = await User.findById(ownerId);
+    const owner = await prisma.user.findUnique({ where: { id: ownerId! } });
     if (!owner) {
       throw new AppError('Owner not found', 404);
     }
 
     // Calculate total tenants
-    const totalTenants = await TenantOwnerConnection.countDocuments({ owner: ownerId, isDeleted: false });
+    const totalTenants = await prisma.tenantOwnerConnection.count({ where: { ownerId, isDeleted: false } });
     const paidPersons = owner.paidBeds || 0;
     const unpaidPersons = Math.max(0, totalTenants - 2 - paidPersons);
     const amountDue = unpaidPersons * 20; // ₹20 per person
@@ -80,13 +75,13 @@ export const getBedBillingStatus = async (req: AuthenticatedRequest, res: Respon
 export const createBedBillingOrder = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const ownerId = req.user?.userId;
-    const owner = await User.findById(ownerId);
+    const owner = await prisma.user.findUnique({ where: { id: ownerId! } });
     if (!owner) {
       throw new AppError('Owner not found', 404);
     }
 
-    const totalTenants = await TenantOwnerConnection.countDocuments({ owner: ownerId, isDeleted: false });
-    
+    const totalTenants = await prisma.tenantOwnerConnection.count({ where: { ownerId, isDeleted: false } });
+
     const paidPersons = Number(owner.paidBeds) || 0;
     const unpaidPersons = Math.max(0, totalTenants - 2 - paidPersons);
     if (unpaidPersons === 0) {
@@ -139,7 +134,7 @@ export const createBedBillingOrder = async (req: AuthenticatedRequest, res: Resp
 export const verifyBedBillingPayment = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const ownerId = req.user?.userId;
-    const owner = await User.findById(ownerId);
+    const owner = await prisma.user.findUnique({ where: { id: ownerId! } });
     if (!owner) {
       throw new AppError('Owner not found', 404);
     }
@@ -170,7 +165,7 @@ export const verifyBedBillingPayment = async (req: AuthenticatedRequest, res: Re
     }
 
     // Only grant licences that are actually outstanding.
-    const outstanding = await TenantOwnerConnection.countDocuments({ owner: ownerId, isDeleted: false });
+    const outstanding = await prisma.tenantOwnerConnection.count({ where: { ownerId, isDeleted: false } });
     if (Math.max(0, outstanding - 2 - (owner.paidBeds || 0)) === 0) {
       throw new AppError('You have no outstanding tenant licences to pay for.', 400);
     }
@@ -180,13 +175,13 @@ export const verifyBedBillingPayment = async (req: AuthenticatedRequest, res: Re
 
     // Set paidPersons to the new total
     const oldPaidPersons = owner.paidBeds || 0;
-    owner.paidBeds = Math.max(newlyPaidLimit, owner.paidBeds);
-    await owner.save();
+    const newPaidBeds = Math.max(newlyPaidLimit, owner.paidBeds);
+    const updated = await prisma.user.update({ where: { id: ownerId! }, data: { paidBeds: newPaidBeds } });
 
     return res.status(200).json({
       success: true,
-      message: `Licenses updated. Total persons paid increased from ${oldPaidPersons} to ${owner.paidBeds}.`,
-      paidPersons: owner.paidBeds
+      message: `Licenses updated. Total persons paid increased from ${oldPaidPersons} to ${updated.paidBeds}.`,
+      paidPersons: updated.paidBeds
     });
   } catch (error) {
     next(error);

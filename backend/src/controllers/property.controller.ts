@@ -1,10 +1,8 @@
 import { Response, NextFunction } from 'express';
-import Property from '../models/Property.js';
-import Room from '../models/Room.js';
-import Bed from '../models/Bed.js';
-import Tenant from '../models/Tenant.js';
+import prisma from '../lib/prisma.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
+import { serialize } from '../utils/serialize.js';
 import { checkUnpaidPersonsLimit, updateRoomOccupancy } from './tenant.controller.js';
 
 export const createProperty = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
@@ -29,35 +27,41 @@ export const createProperty = async (req: AuthenticatedRequest, res: Response, n
       throw new AppError('Total rooms must be between 0 and 200', 400);
     }
 
-    const property = await Property.create({
-      propertyName,
-      address: structuredAddress,
-      description,
-      images: images || ['https://images.unsplash.com/photo-1564013799919-ab600027ffc6?auto=format&fit=crop&w=800&q=80'],
-      totalRooms: requestedRooms,
-      owner: ownerId
+    const property = await prisma.property.create({
+      data: {
+        propertyName,
+        address: structuredAddress,
+        description,
+        images: images || ['https://images.unsplash.com/photo-1564013799919-ab600027ffc6?auto=format&fit=crop&w=800&q=80'],
+        totalRooms: requestedRooms,
+        ownerId
+      }
     });
 
     // Create default rooms
     const createdRooms = [];
     const capacity = roomType === 'flat' ? 4 : 2;
     for (let i = 1; i <= requestedRooms; i++) {
-      const room = await Room.create({
-        property: property._id,
-        roomNumber: `Room-${100 + i}`,
-        roomType,
-        bedCapacity: capacity,
-        occupancyStatus: 'vacant',
-        monthlyRent: roomType === 'flat' ? 12000 : 5000 // Default rent for flat vs pg room
+      const room = await prisma.room.create({
+        data: {
+          propertyId: property.id,
+          roomNumber: `Room-${100 + i}`,
+          roomType,
+          bedCapacity: capacity,
+          occupancyStatus: 'vacant',
+          monthlyRent: roomType === 'flat' ? 12000 : 5000 // Default rent for flat vs pg room
+        }
       });
 
       // Create beds for each room
       for (let b = 1; b <= capacity; b++) {
-        await Bed.create({
-          room: room._id,
-          bedNumber: roomType === 'flat' ? `${room.roomNumber}-Occupant-${b}` : `${room.roomNumber}-Bed${b}`,
-          tenant: null,
-          isOccupied: false
+        await prisma.bed.create({
+          data: {
+            roomId: room.id,
+            bedNumber: roomType === 'flat' ? `${room.roomNumber}-Occupant-${b}` : `${room.roomNumber}-Bed${b}`,
+            tenantId: null,
+            isOccupied: false
+          }
         });
       }
       createdRooms.push(room);
@@ -65,8 +69,8 @@ export const createProperty = async (req: AuthenticatedRequest, res: Response, n
 
     return res.status(201).json({
       message: 'Property and default rooms/beds created successfully',
-      property,
-      rooms: createdRooms
+      property: serialize(property),
+      rooms: serialize(createdRooms)
     });
   } catch (error) {
     next(error);
@@ -76,10 +80,14 @@ export const createProperty = async (req: AuthenticatedRequest, res: Response, n
 export const getProperties = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const ownerId = req.user?.userId;
-    const query = req.user?.role === 'admin' ? {} : { owner: ownerId };
-    
-    const properties = await Property.find(query).populate('owner', 'fullName email phone');
-    return res.status(200).json(properties);
+    const where = req.user?.role === 'admin' ? {} : { ownerId };
+
+    const properties = await prisma.property.findMany({
+      where,
+      include: { owner: { select: { id: true, fullName: true, email: true, phone: true } } },
+      orderBy: { createdAt: 'desc' }
+    });
+    return res.status(200).json(serialize(properties));
   } catch (error) {
     next(error);
   }
@@ -88,26 +96,29 @@ export const getProperties = async (req: AuthenticatedRequest, res: Response, ne
 export const getPropertyById = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    const property = await Property.findById(id);
+    const property = await prisma.property.findUnique({ where: { id } });
 
     if (!property) {
       throw new AppError('Property not found', 404);
     }
 
-    if (req.user?.role !== 'admin' && property.owner.toString() !== req.user?.userId) {
+    if (req.user?.role !== 'admin' && property.ownerId !== req.user?.userId) {
       throw new AppError('You do not have access to this property.', 403);
     }
 
-    const rooms = await Room.find({ property: property._id });
-    
+    const rooms = await prisma.room.findMany({ where: { propertyId: property.id } });
+
     // Fetch beds for these rooms, fully populating the tenant details
-    const roomIds = rooms.map(r => r._id);
-    const beds = await Bed.find({ room: { $in: roomIds } }).populate('tenant');
+    const roomIds = rooms.map((r) => r.id);
+    const beds = await prisma.bed.findMany({
+      where: { roomId: { in: roomIds } },
+      include: { tenant: true }
+    });
 
     return res.status(200).json({
-      property,
-      rooms,
-      beds
+      property: serialize(property),
+      rooms: serialize(rooms),
+      beds: serialize(beds)
     });
   } catch (error) {
     next(error);
@@ -119,38 +130,48 @@ export const updateProperty = async (req: AuthenticatedRequest, res: Response, n
     const { id } = req.params;
     const { propertyName, address, description, images, totalRooms } = req.body;
 
-    const property = await Property.findById(id);
+    const property = await prisma.property.findUnique({ where: { id } });
     if (!property) {
       throw new AppError('Property not found', 404);
     }
 
-    if (req.user?.role !== 'admin' && property.owner.toString() !== req.user?.userId) {
+    if (req.user?.role !== 'admin' && property.ownerId !== req.user?.userId) {
       throw new AppError('You can only update your own properties.', 403);
     }
 
-    property.propertyName = propertyName || property.propertyName;
+    const existingAddress = (property.address as any) || {};
+    let newAddress = existingAddress;
     if (address) {
       if (typeof address === 'string') {
         // Legacy compatibility: store as-is with city field
-        property.address = { pincode: '', flatNo: '', area: address, landmark: '', city: '', state: '' } as any;
+        newAddress = { pincode: '', flatNo: '', area: address, landmark: '', city: '', state: '' };
       } else {
-        property.address = {
-          pincode: address.pincode ?? property.address?.pincode ?? '',
-          flatNo: address.flatNo ?? property.address?.flatNo ?? '',
-          area: address.area ?? property.address?.area ?? '',
-          landmark: address.landmark ?? property.address?.landmark ?? '',
-          city: address.city ?? property.address?.city ?? '',
-          state: address.state ?? property.address?.state ?? ''
-        } as any;
+        newAddress = {
+          pincode: address.pincode ?? existingAddress?.pincode ?? '',
+          flatNo: address.flatNo ?? existingAddress?.flatNo ?? '',
+          area: address.area ?? existingAddress?.area ?? '',
+          landmark: address.landmark ?? existingAddress?.landmark ?? '',
+          city: address.city ?? existingAddress?.city ?? '',
+          state: address.state ?? existingAddress?.state ?? ''
+        };
       }
     }
-    property.description = description !== undefined ? description : property.description;
-    property.images = images || property.images;
-    // totalRooms is derived from the rooms collection, never set directly.
-    property.totalRooms = await Room.countDocuments({ property: property._id });
 
-    await property.save();
-    return res.status(200).json({ message: 'Property updated successfully', property });
+    // totalRooms is derived from the rooms collection, never set directly.
+    const roomCount = await prisma.room.count({ where: { propertyId: property.id } });
+
+    const updated = await prisma.property.update({
+      where: { id },
+      data: {
+        propertyName: propertyName || property.propertyName,
+        address: newAddress,
+        description: description !== undefined ? description : property.description,
+        images: images || property.images,
+        totalRooms: roomCount
+      }
+    });
+
+    return res.status(200).json({ message: 'Property updated successfully', property: serialize(updated) });
   } catch (error) {
     next(error);
   }
@@ -160,29 +181,29 @@ export const deleteProperty = async (req: AuthenticatedRequest, res: Response, n
   try {
     const { id } = req.params;
 
-    const property = await Property.findById(id);
+    const property = await prisma.property.findUnique({ where: { id } });
     if (!property) {
       throw new AppError('Property not found', 404);
     }
 
-    if (req.user?.role !== 'admin' && property.owner.toString() !== req.user?.userId) {
+    if (req.user?.role !== 'admin' && property.ownerId !== req.user?.userId) {
       throw new AppError('You can only delete your own properties.', 403);
     }
 
     // Clean up rooms, beds, and unassign tenants
-    const rooms = await Room.find({ property: property._id });
-    const roomIds = rooms.map(r => r._id);
+    const rooms = await prisma.room.findMany({ where: { propertyId: property.id } });
+    const roomIds = rooms.map((r) => r.id);
 
-    await Bed.deleteMany({ room: { $in: roomIds } });
-    await Room.deleteMany({ property: property._id });
-    
+    await prisma.bed.deleteMany({ where: { roomId: { in: roomIds } } });
+    await prisma.room.deleteMany({ where: { propertyId: property.id } });
+
     // Clear tenant assignments
-    await Tenant.updateMany(
-      { assignedProperty: property._id },
-      { $set: { assignedProperty: null, assignedRoom: null, assignedBed: null, agreementStatus: 'expired' } }
-    );
+    await prisma.tenant.updateMany({
+      where: { assignedPropertyId: property.id },
+      data: { assignedPropertyId: null, assignedRoomId: null, assignedBedId: null, agreementStatus: 'expired' }
+    });
 
-    await Property.findByIdAndDelete(id);
+    await prisma.property.delete({ where: { id } });
 
     return res.status(200).json({ message: 'Property deleted and associated rooms/beds cleared.' });
   } catch (error) {
@@ -196,19 +217,19 @@ export const addRoom = async (req: AuthenticatedRequest, res: Response, next: Ne
     const { propertyId } = req.params;
     const { roomNumber, bedCapacity, monthlyRent, roomType = 'pg', flatCategory, propertyType, preferredTenant, furnishedType } = req.body;
 
-    const property = await Property.findById(propertyId);
+    const property = await prisma.property.findUnique({ where: { id: propertyId } });
     if (!property) {
       throw new AppError('Property not found', 404);
     }
 
-    if (req.user?.role !== 'admin' && property.owner.toString() !== req.user?.userId) {
+    if (req.user?.role !== 'admin' && property.ownerId !== req.user?.userId) {
       throw new AppError('You can only add rooms to your own properties.', 403);
     }
 
     const actualCapacity = bedCapacity;
 
     const roomData: any = {
-      property: propertyId,
+      propertyId,
       roomNumber,
       roomType,
       bedCapacity: actualCapacity,
@@ -220,25 +241,27 @@ export const addRoom = async (req: AuthenticatedRequest, res: Response, next: Ne
     if (preferredTenant && preferredTenant.length) roomData.preferredTenant = preferredTenant;
     if (furnishedType) roomData.furnishedType = furnishedType;
 
-    const room = await Room.create(roomData);
+    const room = await prisma.room.create({ data: roomData });
 
     // Create beds
     const beds = [];
     for (let i = 1; i <= actualCapacity; i++) {
-      const bed = await Bed.create({
-        room: room._id,
-        bedNumber: roomType === 'flat' ? `${room.roomNumber}-Occupant-${i}` : `${room.roomNumber}-Bed${i}`,
-        tenant: null,
-        isOccupied: false
+      const bed = await prisma.bed.create({
+        data: {
+          roomId: room.id,
+          bedNumber: roomType === 'flat' ? `${room.roomNumber}-Occupant-${i}` : `${room.roomNumber}-Bed${i}`,
+          tenantId: null,
+          isOccupied: false
+        }
       });
       beds.push(bed);
     }
 
     // Keep the stored count in step with the rooms that actually exist.
-    property.totalRooms = await Room.countDocuments({ property: property._id });
-    await property.save();
+    const roomCount = await prisma.room.count({ where: { propertyId: property.id } });
+    await prisma.property.update({ where: { id: property.id }, data: { totalRooms: roomCount } });
 
-    return res.status(201).json({ room, beds });
+    return res.status(201).json({ room: serialize(room), beds: serialize(beds) });
   } catch (error) {
     next(error);
   }
@@ -249,20 +272,20 @@ export const updateRoom = async (req: AuthenticatedRequest, res: Response, next:
     const { roomId } = req.params;
     const { roomNumber, bedCapacity, monthlyRent, agreementDocName, agreementDocData, flatCategory, propertyType, preferredTenant, furnishedType } = req.body;
 
-    const room = await Room.findById(roomId);
+    const room = await prisma.room.findUnique({ where: { id: roomId } });
     if (!room) {
       throw new AppError('Room not found', 404);
     }
 
     // Validate ownership
-    const property = await Property.findById(room.property);
-    if (!property || (req.user?.role !== 'admin' && property.owner.toString() !== req.user?.userId)) {
+    const property = await prisma.property.findUnique({ where: { id: room.propertyId } });
+    if (!property || (req.user?.role !== 'admin' && property.ownerId !== req.user?.userId)) {
       throw new AppError('You can only edit rooms in your own properties.', 403);
     }
 
     // Check unpaid person limits if uploading document
-    if (agreementDocData !== undefined && req.user?.role !== 'admin' && property.owner) {
-      await checkUnpaidPersonsLimit(property.owner.toString());
+    if (agreementDocData !== undefined && req.user?.role !== 'admin' && property.ownerId) {
+      await checkUnpaidPersonsLimit(property.ownerId);
     }
 
     if (typeof agreementDocData === 'string' && agreementDocData.length > 4 * 1024 * 1024) {
@@ -277,30 +300,34 @@ export const updateRoom = async (req: AuthenticatedRequest, res: Response, next:
       throw new AppError('Bed capacity must be a whole number of at least 1', 400);
     }
 
-    room.roomNumber = roomNumber || room.roomNumber;
-    room.monthlyRent = monthlyRent !== undefined ? monthlyRent : room.monthlyRent;
-    if (agreementDocName !== undefined) room.agreementDocName = agreementDocName;
-    if (agreementDocData !== undefined) room.agreementDocData = agreementDocData;
-    if (flatCategory !== undefined) (room as any).flatCategory = flatCategory;
-    if (propertyType !== undefined) (room as any).propertyType = propertyType;
-    if (preferredTenant !== undefined) (room as any).preferredTenant = preferredTenant;
-    if (furnishedType !== undefined) (room as any).furnishedType = furnishedType;
+    const data: any = {
+      roomNumber: roomNumber || room.roomNumber,
+      monthlyRent: monthlyRent !== undefined ? monthlyRent : room.monthlyRent
+    };
+    if (agreementDocName !== undefined) data.agreementDocName = agreementDocName;
+    if (agreementDocData !== undefined) data.agreementDocData = agreementDocData;
+    if (flatCategory !== undefined) data.flatCategory = flatCategory;
+    if (propertyType !== undefined) data.propertyType = propertyType;
+    if (preferredTenant !== undefined) data.preferredTenant = preferredTenant;
+    if (furnishedType !== undefined) data.furnishedType = furnishedType;
 
     if (bedCapacity !== undefined && bedCapacity !== room.bedCapacity) {
-      const currentBeds = await Bed.find({ room: room._id });
+      const currentBeds = await prisma.bed.findMany({ where: { roomId: room.id } });
       if (bedCapacity > room.bedCapacity) {
         // Add more beds
         for (let i = room.bedCapacity + 1; i <= bedCapacity; i++) {
-          await Bed.create({
-            room: room._id,
-            bedNumber: room.roomType === 'flat' ? `${room.roomNumber}-Occupant-${i}` : `${room.roomNumber}-Bed${i}`,
-            tenant: null,
-            isOccupied: false
+          await prisma.bed.create({
+            data: {
+              roomId: room.id,
+              bedNumber: room.roomType === 'flat' ? `${room.roomNumber}-Occupant-${i}` : `${room.roomNumber}-Bed${i}`,
+              tenantId: null,
+              isOccupied: false
+            }
           });
         }
       } else {
         // Check if removing beds would dislodge occupied beds
-        const occupiedBedsCount = currentBeds.filter(b => b.isOccupied).length;
+        const occupiedBedsCount = currentBeds.filter((b) => b.isOccupied).length;
         if (occupiedBedsCount > bedCapacity) {
           throw new AppError(`Bed capacity cannot be reduced below ${occupiedBedsCount}, the number of beds currently occupied.`, 409);
         }
@@ -310,17 +337,17 @@ export const updateRoom = async (req: AuthenticatedRequest, res: Response, next:
         const targetToDelete = room.bedCapacity - bedCapacity;
         for (const bed of currentBeds) {
           if (!bed.isOccupied && deletedCount < targetToDelete) {
-            await Bed.findByIdAndDelete(bed._id);
+            await prisma.bed.delete({ where: { id: bed.id } });
             deletedCount++;
           }
         }
       }
-      room.bedCapacity = bedCapacity;
+      data.bedCapacity = bedCapacity;
     }
 
-    await room.save();
-    await updateRoomOccupancy(room._id.toString());
-    return res.status(200).json({ message: 'Room updated successfully', room });
+    const updated = await prisma.room.update({ where: { id: roomId }, data });
+    await updateRoomOccupancy(updated.id);
+    return res.status(200).json({ message: 'Room updated successfully', room: serialize(updated) });
   } catch (error) {
     next(error);
   }
@@ -330,18 +357,18 @@ export const deleteRoom = async (req: AuthenticatedRequest, res: Response, next:
   try {
     const { roomId } = req.params;
 
-    const room = await Room.findById(roomId);
+    const room = await prisma.room.findUnique({ where: { id: roomId } });
     if (!room) {
       throw new AppError('Room not found', 404);
     }
 
-    const property = await Property.findById(room.property);
-    if (!property || (req.user?.role !== 'admin' && property.owner.toString() !== req.user?.userId)) {
+    const property = await prisma.property.findUnique({ where: { id: room.propertyId } });
+    if (!property || (req.user?.role !== 'admin' && property.ownerId !== req.user?.userId)) {
       throw new AppError('You can only delete rooms in your own properties.', 403);
     }
 
     // Check if any beds are occupied
-    const occupiedBeds = await Bed.find({ room: room._id, isOccupied: true });
+    const occupiedBeds = await prisma.bed.findMany({ where: { roomId: room.id, isOccupied: true } });
     if (occupiedBeds.length > 0) {
       throw new AppError(
         `This room still has ${occupiedBeds.length} occupied bed${occupiedBeds.length > 1 ? 's' : ''}. ` +
@@ -350,11 +377,11 @@ export const deleteRoom = async (req: AuthenticatedRequest, res: Response, next:
       );
     }
 
-    await Bed.deleteMany({ room: room._id });
-    await Room.findByIdAndDelete(roomId);
+    await prisma.bed.deleteMany({ where: { roomId: room.id } });
+    await prisma.room.delete({ where: { id: roomId } });
 
-    property.totalRooms = await Room.countDocuments({ property: property._id });
-    await property.save();
+    const roomCount = await prisma.room.count({ where: { propertyId: property.id } });
+    await prisma.property.update({ where: { id: property.id }, data: { totalRooms: roomCount } });
 
     return res.status(200).json({ message: 'Room deleted successfully' });
   } catch (error) {

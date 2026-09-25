@@ -90,8 +90,10 @@ const optionalPanNumber = optionalText('PAN number').refine((v) => !v || v.lengt
   message: 'PAN number must be exactly 10 characters, for example ABCDE1234F'
 });
 
-// Mongo ObjectId. Validating here turns what would be a 500 CastError deeper in
-// the stack into a clear 400 naming the field.
+// Postgres UUID primary key. Validating here turns what would be a 500 error
+// deeper in the stack into a clear 400 naming the field.
+const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
 const objectId = (label: string) =>
   z
     .string({
@@ -100,7 +102,7 @@ const objectId = (label: string) =>
     })
     .trim()
     .min(1, `${label} is required`)
-    .refine((v) => /^[0-9a-fA-F]{24}$/.test(v), { message: `${label} is not a valid reference` });
+    .refine((v) => UUID_RE.test(v), { message: `${label} is not a valid reference` });
 
 const optionalObjectId = (label: string) =>
   z
@@ -108,7 +110,7 @@ const optionalObjectId = (label: string) =>
     .trim()
     .optional()
     .nullable()
-    .refine((v) => !v || /^[0-9a-fA-F]{24}$/.test(v), {
+    .refine((v) => !v || UUID_RE.test(v), {
       message: `${label} is not a valid reference`
     });
 

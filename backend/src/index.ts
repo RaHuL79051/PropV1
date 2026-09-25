@@ -1,31 +1,27 @@
 import 'dotenv/config';
-import mongoose from 'mongoose';
-import app from './app.js';
-import User from './models/User.js';
-import Setting from './models/Setting.js';
-import Tenant from './models/Tenant.js';
-import TenantOwnerConnection from './models/TenantOwnerConnection.js';
 import bcrypt from 'bcrypt';
+import app from './app.js';
+import prisma from './lib/prisma.js';
 import { startMonthlyBillingScheduler } from './utils/scheduler.js';
 
-
 const PORT = process.env.PORT || 5000;
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/proptenant';
 
 const seedAdmin = async () => {
   try {
-    const adminExists = await User.findOne({ role: 'admin' });
+    const adminExists = await prisma.user.findFirst({ where: { role: 'admin' } });
     if (!adminExists) {
       const passwordHash = await bcrypt.hash('admin123', 10);
-      await User.create({
-        fullName: 'System Admin',
-        email: 'admin@proptenant.com',
-        phone: '9999999999',
-        passwordHash,
-        role: 'admin',
-        status: 'approved',
-        isActive: true,
-        paidBeds: 0
+      await prisma.user.create({
+        data: {
+          fullName: 'System Admin',
+          email: 'admin@proptenant.com',
+          phone: '9999999999',
+          passwordHash,
+          role: 'admin',
+          status: 'approved',
+          isActive: true,
+          paidBeds: 0
+        }
       });
       console.log('Default admin user created: admin@proptenant.com / admin123');
     } else {
@@ -38,16 +34,18 @@ const seedAdmin = async () => {
 
 const seedSettings = async () => {
   try {
-    const termsExist = await Setting.findOne({ key: 'default_lease_terms' });
+    const termsExist = await prisma.setting.findUnique({ where: { key: 'default_lease_terms' } });
     if (!termsExist) {
-      await Setting.create({
-        key: 'default_lease_terms',
-        value: `1. RENT PAYMENT: Rent is payable in advance on or before the 5th day of every calendar month.
+      await prisma.setting.create({
+        data: {
+          key: 'default_lease_terms',
+          value: `1. RENT PAYMENT: Rent is payable in advance on or before the 5th day of every calendar month.
 2. MAINTENANCE: The occupant shall keep the premises, rooms, and common areas in a clean, hygienic, and undamaged condition.
 3. SUB-LEASING: The occupant shall not sublet or assign the whole or any part of the premises to any other person.
 4. PEACE AND QUIET: Occupants must maintain peace and order, keeping noise levels low. No illegal activities are permitted on the premises.
 5. TERMINATION NOTICE: Either party can terminate this agreement by giving 30 days notice to the other party.`,
-        description: 'Standard lease terms and covenants applied to all agreements by default.'
+          description: 'Standard lease terms and covenants applied to all agreements by default.'
+        }
       });
       console.log('Default lease terms seeded successfully.');
     } else {
@@ -60,19 +58,16 @@ const seedSettings = async () => {
 
 const seedConnections = async () => {
   try {
-    const tenants = await Tenant.find({});
+    const tenants = await prisma.tenant.findMany();
     let createdCount = 0;
     for (const tenant of tenants) {
-      if (tenant.owner) {
-        const connectionExists = await TenantOwnerConnection.findOne({
-          tenant: tenant._id,
-          owner: tenant.owner
+      if (tenant.ownerId) {
+        const connectionExists = await prisma.tenantOwnerConnection.findFirst({
+          where: { tenantId: tenant.id, ownerId: tenant.ownerId }
         });
         if (!connectionExists) {
-          await TenantOwnerConnection.create({
-            tenant: tenant._id,
-            owner: tenant.owner,
-            isDeleted: false
+          await prisma.tenantOwnerConnection.create({
+            data: { tenantId: tenant.id, ownerId: tenant.ownerId, isDeleted: false }
           });
           createdCount++;
         }
@@ -88,11 +83,11 @@ const seedConnections = async () => {
   }
 };
 
-// Connect to MongoDB
-mongoose
-  .connect(MONGODB_URI)
+// Connect to Postgres (Supabase)
+prisma
+  .$connect()
   .then(async () => {
-    console.log('Successfully connected to MongoDB Database');
+    console.log('Successfully connected to the Postgres database');
     await seedAdmin();
     await seedSettings();
     await seedConnections();
@@ -105,4 +100,3 @@ mongoose
     console.error('Database connection failed', err);
     process.exit(1);
   });
-

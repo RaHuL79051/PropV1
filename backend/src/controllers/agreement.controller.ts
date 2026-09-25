@@ -1,20 +1,17 @@
 import { Response, NextFunction } from 'express';
-import Agreement from '../models/Agreement.js';
-import Tenant from '../models/Tenant.js';
-import Setting from '../models/Setting.js';
-import TenantOwnerConnection from '../models/TenantOwnerConnection.js';
+import crypto from 'crypto';
+import prisma from '../lib/prisma.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
+import { serialize, buildFullAddress } from '../utils/serialize.js';
 import PDFDocument from 'pdfkit';
 
 // Agreement access follows the live owner-tenant link, not the tenant record's
 // original creator, so tenants who have moved between owners resolve correctly.
 const assertAgreementAccess = async (req: AuthenticatedRequest, tenantId: any, action: string) => {
   if (req.user?.role === 'admin') return;
-  const connection = await TenantOwnerConnection.findOne({
-    tenant: tenantId,
-    owner: req.user?.userId,
-    isDeleted: false
+  const connection = await prisma.tenantOwnerConnection.findFirst({
+    where: { tenantId, ownerId: req.user?.userId, isDeleted: false }
   });
   if (!connection) {
     throw new AppError(`Unauthorized attempt to ${action}`, 403);
@@ -34,12 +31,12 @@ export const createAgreement = async (req: AuthenticatedRequest, res: Response, 
       additionalTerms
     } = req.body;
 
-    const tenantRecord = await Tenant.findById(tenant);
+    const tenantRecord = await prisma.tenant.findUnique({ where: { id: tenant } });
     if (!tenantRecord) {
       throw new AppError('Tenant not found', 404);
     }
 
-    await assertAgreementAccess(req, tenantRecord._id, 'create an agreement for this tenant');
+    await assertAgreementAccess(req, tenantRecord.id, 'create an agreement for this tenant');
 
     const parsedStart = new Date(startDate);
     const parsedEnd = new Date(endDate);
@@ -50,32 +47,33 @@ export const createAgreement = async (req: AuthenticatedRequest, res: Response, 
       throw new AppError('The agreement end date must be after the start date', 400);
     }
 
-    const defaultLeaseSetting = await Setting.findOne({ key: 'default_lease_terms' });
+    const defaultLeaseSetting = await prisma.setting.findUnique({ where: { key: 'default_lease_terms' } });
     const defaultTerms = defaultLeaseSetting?.value || 'Standard tenancy terms and conditions apply. The tenant agrees to maintain the property in good condition, pay rent by the due date, and adhere to local housing regulations.';
 
-    const agreement = new Agreement({
-      tenant,
-      property,
-      room,
-      startDate: parsedStart,
-      endDate: parsedEnd,
-      monthlyRent,
-      securityDeposit,
-      termsAndConditions: defaultTerms,
-      additionalTerms: additionalTerms || '',
-      status: 'active'
+    const agreementId = crypto.randomUUID();
+    const agreement = await prisma.agreement.create({
+      data: {
+        id: agreementId,
+        tenantId: tenant,
+        propertyId: property,
+        roomId: room,
+        startDate: parsedStart,
+        endDate: parsedEnd,
+        monthlyRent,
+        securityDeposit,
+        termsAndConditions: defaultTerms,
+        additionalTerms: additionalTerms || '',
+        documentUrl: `/api/agreements/${agreementId}/pdf`,
+        status: 'active'
+      }
     });
 
-    agreement.documentUrl = `/api/agreements/${agreement._id}/pdf`;
-    await agreement.save();
-
     // Update tenant agreement status
-    tenantRecord.agreementStatus = 'active';
-    await tenantRecord.save();
+    await prisma.tenant.update({ where: { id: tenantRecord.id }, data: { agreementStatus: 'active' } });
 
     return res.status(201).json({
       message: 'Rent agreement registered successfully',
-      agreement
+      agreement: serialize(agreement)
     });
   } catch (error) {
     next(error);
@@ -86,25 +84,28 @@ export const getAgreements = async (req: AuthenticatedRequest, res: Response, ne
   try {
     const ownerId = req.user?.userId;
 
-    // Direct check if admin or owner
-    let agreements;
-    if (req.user?.role === 'admin') {
-      agreements = await Agreement.find()
-        .populate('tenant', 'fullName phone')
-        .populate('property', 'propertyName address')
-        .populate('room', 'roomNumber');
-    } else {
+    let where: any = {};
+    if (req.user?.role !== 'admin') {
       // Find tenants owned by this owner
-      const tenantConnections = await TenantOwnerConnection.find({ owner: ownerId, isDeleted: false }).select('tenant');
-      const tenantIds = tenantConnections.map(c => c.tenant);
-
-      agreements = await Agreement.find({ tenant: { $in: tenantIds } })
-        .populate('tenant', 'fullName phone')
-        .populate('property', 'propertyName address')
-        .populate('room', 'roomNumber');
+      const tenantConnections = await prisma.tenantOwnerConnection.findMany({
+        where: { ownerId, isDeleted: false },
+        select: { tenantId: true }
+      });
+      const tenantIds = tenantConnections.map((c) => c.tenantId);
+      where = { tenantId: { in: tenantIds } };
     }
 
-    return res.status(200).json(agreements);
+    const agreements = await prisma.agreement.findMany({
+      where,
+      include: {
+        tenant: { select: { id: true, fullName: true, phone: true } },
+        property: { select: { id: true, propertyName: true, address: true } },
+        room: { select: { id: true, roomNumber: true } }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    return res.status(200).json(serialize(agreements));
   } catch (error) {
     next(error);
   }
@@ -113,18 +114,22 @@ export const getAgreements = async (req: AuthenticatedRequest, res: Response, ne
 export const getAgreementById = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    const agreement = await Agreement.findById(id)
-      .populate('tenant', 'fullName phone owner')
-      .populate('property', 'propertyName address')
-      .populate('room', 'roomNumber');
+    const agreement = await prisma.agreement.findUnique({
+      where: { id },
+      include: {
+        tenant: { select: { id: true, fullName: true, phone: true, ownerId: true } },
+        property: { select: { id: true, propertyName: true, address: true } },
+        room: { select: { id: true, roomNumber: true } }
+      }
+    });
 
     if (!agreement) {
       throw new AppError('Agreement not found', 404);
     }
 
-    await assertAgreementAccess(req, (agreement.tenant as any)._id, 'view this agreement');
+    await assertAgreementAccess(req, agreement.tenant.id, 'view this agreement');
 
-    return res.status(200).json(agreement);
+    return res.status(200).json(serialize(agreement));
   } catch (error) {
     next(error);
   }
@@ -133,26 +138,21 @@ export const getAgreementById = async (req: AuthenticatedRequest, res: Response,
 export const terminateAgreement = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    const agreement = await Agreement.findById(id).populate('tenant');
+    const agreement = await prisma.agreement.findUnique({ where: { id }, include: { tenant: true } });
 
     if (!agreement) {
       throw new AppError('Agreement not found', 404);
     }
 
-    await assertAgreementAccess(req, (agreement.tenant as any)?._id, 'terminate this agreement');
+    await assertAgreementAccess(req, agreement.tenant?.id, 'terminate this agreement');
 
-    agreement.status = 'expired';
-    await agreement.save();
+    const updated = await prisma.agreement.update({ where: { id }, data: { status: 'expired' } });
 
     if (agreement.tenant) {
-      const tenantRecord = await Tenant.findById(agreement.tenant._id);
-      if (tenantRecord) {
-        tenantRecord.agreementStatus = 'expired';
-        await tenantRecord.save();
-      }
+      await prisma.tenant.update({ where: { id: agreement.tenant.id }, data: { agreementStatus: 'expired' } });
     }
 
-    return res.status(200).json({ message: 'Agreement terminated/expired.', agreement });
+    return res.status(200).json({ message: 'Agreement terminated/expired.', agreement: serialize(updated) });
   } catch (error) {
     next(error);
   }
@@ -161,10 +161,10 @@ export const terminateAgreement = async (req: AuthenticatedRequest, res: Respons
 export const downloadAgreementPdf = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    const agreement = await Agreement.findById(id)
-      .populate('tenant')
-      .populate('property')
-      .populate('room');
+    const agreement = await prisma.agreement.findUnique({
+      where: { id },
+      include: { tenant: true, property: true, room: true }
+    });
 
     if (!agreement) {
       throw new AppError('Agreement not found', 404);
@@ -175,8 +175,8 @@ export const downloadAgreementPdf = async (req: AuthenticatedRequest, res: Respo
     if (!tenantRecord) {
       throw new AppError('Tenant associated with agreement not found', 404);
     }
-    
-    await assertAgreementAccess(req, tenantRecord._id, 'download this agreement');
+
+    await assertAgreementAccess(req, tenantRecord.id, 'download this agreement');
 
     // Set Response headers
     res.setHeader('Content-Type', 'application/pdf');
@@ -206,7 +206,7 @@ export const downloadAgreementPdf = async (req: AuthenticatedRequest, res: Respo
     // Property details
     doc.fontSize(14).text('2. PREMISES', { underline: true });
     doc.fontSize(12).text(`Property Name: ${(agreement.property as any)?.propertyName || 'N/A'}`);
-    doc.text(`Address: ${(agreement.property as any)?.fullAddress || (agreement.property as any)?.address || 'N/A'}`);
+    doc.text(`Address: ${buildFullAddress(((agreement.property as any)?.address || {}) as any) || 'N/A'}`);
     doc.text(`Room Assigned: Room No. ${(agreement.room as any)?.roomNumber || 'N/A'}`);
     doc.moveDown(1.5);
 
@@ -253,25 +253,24 @@ export const downloadAgreementPdf = async (req: AuthenticatedRequest, res: Respo
 export const deleteAgreement = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    const agreement = await Agreement.findById(id);
+    const agreement = await prisma.agreement.findUnique({ where: { id } });
 
     if (!agreement) {
       throw new AppError('Agreement not found', 404);
     }
 
     // Auth check
-    const tenantRecord = await Tenant.findById(agreement.tenant);
+    const tenantRecord = await prisma.tenant.findUnique({ where: { id: agreement.tenantId } });
     if (!tenantRecord) {
       throw new AppError('Tenant associated with agreement not found', 404);
     }
 
-    await assertAgreementAccess(req, tenantRecord._id, 'delete this agreement');
+    await assertAgreementAccess(req, tenantRecord.id, 'delete this agreement');
 
     // Reset tenant agreementStatus to pending
-    tenantRecord.agreementStatus = 'pending';
-    await tenantRecord.save();
+    await prisma.tenant.update({ where: { id: tenantRecord.id }, data: { agreementStatus: 'pending' } });
 
-    await Agreement.findByIdAndDelete(id);
+    await prisma.agreement.delete({ where: { id } });
 
     return res.status(200).json({
       message: 'Agreement deleted successfully and tenant agreement status reset to pending.'

@@ -1,22 +1,18 @@
 import { Response, NextFunction } from 'express';
-import Payment from '../models/Payment.js';
-import Tenant from '../models/Tenant.js';
-import TenantOwnerConnection from '../models/TenantOwnerConnection.js';
+import prisma from '../lib/prisma.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
+import { serialize } from '../utils/serialize.js';
 import { updateTenantStatsByAadhaar } from '../utils/scoreHelper.js';
-import { AppError as ApiError } from '../middleware/errorHandler.js';
 
 // An owner may only touch invoices belonging to a tenant they are linked to.
 const assertPaymentAccess = async (req: AuthenticatedRequest, tenantId: any, action: string) => {
   if (req.user?.role === 'admin') return;
-  const connection = await TenantOwnerConnection.findOne({
-    tenant: tenantId,
-    owner: req.user?.userId,
-    isDeleted: false
+  const connection = await prisma.tenantOwnerConnection.findFirst({
+    where: { tenantId, ownerId: req.user?.userId, isDeleted: false }
   });
   if (!connection) {
-    throw new ApiError(`Unauthorized attempt to ${action}`, 403);
+    throw new AppError(`Unauthorized attempt to ${action}`, 403);
   }
 };
 
@@ -31,20 +27,22 @@ export const createPayment = async (req: AuthenticatedRequest, res: Response, ne
       throw new AppError('A valid due date is required', 400);
     }
 
-    const payment = await Payment.create({
-      tenant,
-      property,
-      room,
-      amount,
-      dueDate: parsedDueDate,
-      status: 'unpaid',
-      paymentMethod: 'none',
-      transactionId: null
+    const payment = await prisma.payment.create({
+      data: {
+        tenantId: tenant,
+        propertyId: property,
+        roomId: room,
+        amount,
+        dueDate: parsedDueDate,
+        status: 'unpaid',
+        paymentMethod: 'none',
+        transactionId: null
+      }
     });
 
     return res.status(201).json({
       message: 'Rent invoice generated successfully',
-      payment
+      payment: serialize(payment)
     });
   } catch (error) {
     next(error);
@@ -55,27 +53,34 @@ export const getPayments = async (req: AuthenticatedRequest, res: Response, next
   try {
     const ownerId = req.user?.userId;
 
-    let payments;
-    if (req.user?.role === 'admin') {
-      payments = await Payment.find()
-        .populate('tenant', 'fullName phone')
-        .populate({
-          path: 'property',
-          select: 'propertyName address owner',
-          populate: { path: 'owner', select: 'fullName email' }
-        })
-        .populate('room', 'roomNumber');
-    } else {
-      const tenantConnections = await TenantOwnerConnection.find({ owner: ownerId, isDeleted: false }).select('tenant');
-      const tenantIds = tenantConnections.map(c => c.tenant);
-
-      payments = await Payment.find({ tenant: { $in: tenantIds } })
-        .populate('tenant', 'fullName phone')
-        .populate('property', 'propertyName address')
-        .populate('room', 'roomNumber');
+    let where: any = {};
+    if (req.user?.role !== 'admin') {
+      const tenantConnections = await prisma.tenantOwnerConnection.findMany({
+        where: { ownerId, isDeleted: false },
+        select: { tenantId: true }
+      });
+      const tenantIds = tenantConnections.map((c) => c.tenantId);
+      where = { tenantId: { in: tenantIds } };
     }
 
-    return res.status(200).json(payments);
+    const payments = await prisma.payment.findMany({
+      where,
+      include: {
+        tenant: { select: { id: true, fullName: true, phone: true } },
+        property: {
+          select: {
+            id: true,
+            propertyName: true,
+            address: true,
+            owner: { select: { id: true, fullName: true, email: true } }
+          }
+        },
+        room: { select: { id: true, roomNumber: true } }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    return res.status(200).json(serialize(payments));
   } catch (error) {
     next(error);
   }
@@ -86,25 +91,29 @@ export const payInvoice = async (req: AuthenticatedRequest, res: Response, next:
     const { id } = req.params;
     const { paymentMethod, transactionId } = req.body;
 
-    const payment = await Payment.findById(id);
+    const payment = await prisma.payment.findUnique({ where: { id } });
     if (!payment) {
       throw new AppError('That rent invoice no longer exists.', 404);
     }
 
-    await assertPaymentAccess(req, payment.tenant, 'settle this invoice');
+    await assertPaymentAccess(req, payment.tenantId, 'settle this invoice');
 
     if (payment.status === 'paid') {
       throw new AppError('This invoice has already been marked as paid.', 409);
     }
 
-    payment.status = 'paid';
-    payment.paymentDate = new Date();
-    payment.paymentMethod = paymentMethod;
-    payment.transactionId = transactionId || `TXN${Date.now()}`;
-    await payment.save();
+    const updated = await prisma.payment.update({
+      where: { id },
+      data: {
+        status: 'paid',
+        paymentDate: new Date(),
+        paymentMethod,
+        transactionId: transactionId || `TXN${Date.now()}`
+      }
+    });
 
     try {
-      const tenant = await Tenant.findById(payment.tenant);
+      const tenant = await prisma.tenant.findUnique({ where: { id: payment.tenantId } });
       if (tenant && tenant.aadhaarNumber) {
         await updateTenantStatsByAadhaar(tenant.aadhaarNumber);
       }
@@ -114,7 +123,7 @@ export const payInvoice = async (req: AuthenticatedRequest, res: Response, next:
 
     return res.status(200).json({
       message: 'Invoice paid successfully',
-      payment
+      payment: serialize(updated)
     });
   } catch (error) {
     next(error);

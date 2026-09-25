@@ -1,12 +1,9 @@
 import { Response, NextFunction } from 'express';
-import VerificationLog from '../models/VerificationLog.js';
-import Tenant from '../models/Tenant.js';
-import TenantReview from '../models/TenantReview.js';
-import TenantOwnerConnection from '../models/TenantOwnerConnection.js';
+import prisma from '../lib/prisma.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
-
-const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+import { serialize } from '../utils/serialize.js';
+import { updateTenantStatsByAadhaar } from '../utils/scoreHelper.js';
 
 interface IMockReview {
   rating: number;
@@ -114,8 +111,6 @@ const MOCK_AADHAAR_REGISTRY: Record<string, {
   }
 };
 
-import { updateTenantStatsByAadhaar } from '../utils/scoreHelper.js';
-
 export const verifyAadhaar = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const { aadhaarNumber, panNumber, phone, fullName: searchName, operator = 'or' } = req.body;
@@ -135,15 +130,14 @@ export const verifyAadhaar = async (req: AuthenticatedRequest, res: Response, ne
     if (trimmedAadhaar) dbConditions.push({ aadhaarNumber: trimmedAadhaar });
     if (trimmedPan) dbConditions.push({ panNumber: trimmedPan });
     if (trimmedPhone) dbConditions.push({ phone: trimmedPhone });
-    if (trimmedName) dbConditions.push({ fullName: { $regex: new RegExp(escapeRegex(trimmedName), 'i') } });
+    if (trimmedName) dbConditions.push({ fullName: { contains: trimmedName, mode: 'insensitive' } });
 
     let existingTenant = null;
     if (dbConditions.length > 0) {
-      if (operator === 'and') {
-        existingTenant = await Tenant.findOne({ $and: dbConditions }).sort({ createdAt: -1 });
-      } else {
-        existingTenant = await Tenant.findOne({ $or: dbConditions }).sort({ createdAt: -1 });
-      }
+      existingTenant = await prisma.tenant.findFirst({
+        where: operator === 'and' ? { AND: dbConditions } : { OR: dbConditions },
+        orderBy: { createdAt: 'desc' }
+      });
     }
 
     // 2. Search simulated mock registry if not found in DB
@@ -172,9 +166,9 @@ export const verifyAadhaar = async (req: AuthenticatedRequest, res: Response, ne
     const derivedAadhaar = existingTenant?.aadhaarNumber || mockResult?.aadhaarNumber || trimmedAadhaar || '000000000000';
 
     // Check dynamic reviews/tenants based on derived Aadhaar
-    const dbReviewsCount = await TenantReview.countDocuments({ aadhaarNumber: derivedAadhaar });
-    const dbTenantsCount = await Tenant.countDocuments({ aadhaarNumber: derivedAadhaar });
-    
+    const dbReviewsCount = await prisma.tenantReview.count({ where: { aadhaarNumber: derivedAadhaar } });
+    const dbTenantsCount = await prisma.tenant.count({ where: { aadhaarNumber: derivedAadhaar } });
+
     let result: {
       fullName: string;
       previousRating: number;
@@ -189,14 +183,14 @@ export const verifyAadhaar = async (req: AuthenticatedRequest, res: Response, ne
     if (dbReviewsCount > 0 || dbTenantsCount > 0) {
       // Calculate dynamic score and update all tenants
       const stats = await updateTenantStatsByAadhaar(derivedAadhaar);
-      
+
       // Get the name from first matching review or tenant
       let fullNameVal = 'Verified Tenant';
-      const firstTenant = await Tenant.findOne({ aadhaarNumber: derivedAadhaar });
+      const firstTenant = await prisma.tenant.findFirst({ where: { aadhaarNumber: derivedAadhaar } });
       if (firstTenant) {
         fullNameVal = firstTenant.fullName;
       } else {
-        const firstReview = await TenantReview.findOne({ aadhaarNumber: derivedAadhaar });
+        const firstReview = await prisma.tenantReview.findFirst({ where: { aadhaarNumber: derivedAadhaar } });
         if (firstReview) {
           fullNameVal = firstReview.tenantName;
         }
@@ -246,47 +240,52 @@ export const verifyAadhaar = async (req: AuthenticatedRequest, res: Response, ne
       fullName: trimmedName
     };
 
-    const log = await VerificationLog.create({
-      aadhaarNumber: derivedAadhaar,
-      searchCriteria,
-      operator,
-      requester: requesterId,
-      result,
-      riskLevel: result.riskLevel,
-      status: result.verificationStatus
+    const log = await prisma.verificationLog.create({
+      data: {
+        aadhaarNumber: derivedAadhaar,
+        searchCriteria,
+        operator,
+        requesterId: requesterId!,
+        result,
+        riskLevel: result.riskLevel,
+        status: result.verificationStatus
+      }
     });
 
     // Update matching tenant ratings & verificationStatus if they exist in the DB
     if (derivedAadhaar && derivedAadhaar !== '000000000000') {
-      await Tenant.updateMany(
-      { aadhaarNumber: derivedAadhaar },
-      {
-        $set: {
+      await prisma.tenant.updateMany({
+        where: { aadhaarNumber: derivedAadhaar },
+        data: {
           verificationStatus: result.verificationStatus,
           riskLevel: result.riskLevel,
           tenantRating: result.previousRating,
           creditScore: result.creditScore,
           previousOwnerFeedback: result.feedback
         }
-      }
-      );
+      });
     }
 
     // Fetch prefill details if a tenant profile exists in DB
-    const latestTenant = await Tenant.findOne({
-      $or: [
-        { aadhaarNumber: derivedAadhaar },
-        ...(trimmedPan ? [{ panNumber: trimmedPan }] : []),
-        ...(trimmedPhone ? [{ phone: trimmedPhone }] : [])
-      ]
-    }).sort({ createdAt: -1 });
+    const latestTenant = await prisma.tenant.findFirst({
+      where: {
+        OR: [
+          { aadhaarNumber: derivedAadhaar },
+          ...(trimmedPan ? [{ panNumber: trimmedPan }] : []),
+          ...(trimmedPhone ? [{ phone: trimmedPhone }] : [])
+        ]
+      },
+      orderBy: { createdAt: 'desc' }
+    });
 
     const isNewTenant = !latestTenant;
 
     let connectionExists = false;
     let connectionStatus: 'active' | 'inactive' | null = null;
     if (latestTenant) {
-      const connection = await TenantOwnerConnection.findOne({ tenant: latestTenant._id, owner: requesterId });
+      const connection = await prisma.tenantOwnerConnection.findFirst({
+        where: { tenantId: latestTenant.id, ownerId: requesterId }
+      });
       if (connection) {
         connectionExists = true;
         connectionStatus = connection.isDeleted ? 'inactive' : 'active';
@@ -306,10 +305,12 @@ export const verifyAadhaar = async (req: AuthenticatedRequest, res: Response, ne
 
     // Get the last 3 reviews to return
     let reviewsList: IMockReview[] = [];
-    const dbReviews = await TenantReview.find({ aadhaarNumber: derivedAadhaar })
-      .populate('owner', 'fullName')
-      .sort({ createdAt: -1 })
-      .limit(3);
+    const dbReviews = await prisma.tenantReview.findMany({
+      where: { aadhaarNumber: derivedAadhaar },
+      include: { owner: { select: { id: true, fullName: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: 3
+    });
 
     if (dbReviews.length > 0) {
       reviewsList = dbReviews.map(r => ({
@@ -331,7 +332,7 @@ export const verifyAadhaar = async (req: AuthenticatedRequest, res: Response, ne
 
     return res.status(200).json({
       message: 'Verification completed successfully',
-      verificationLog: log,
+      verificationLog: serialize(log),
       prefill,
       reviews: reviewsList,
       connectionExists,
@@ -346,13 +347,15 @@ export const verifyAadhaar = async (req: AuthenticatedRequest, res: Response, ne
 export const getVerificationLogs = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const ownerId = req.user?.userId;
-    const query = req.user?.role === 'admin' ? {} : { requester: ownerId };
+    const where = req.user?.role === 'admin' ? {} : { requesterId: ownerId };
 
-    const logs = await VerificationLog.find(query)
-      .populate('requester', 'fullName email')
-      .sort({ createdAt: -1 });
+    const logs = await prisma.verificationLog.findMany({
+      where,
+      include: { requester: { select: { id: true, fullName: true, email: true } } },
+      orderBy: { createdAt: 'desc' }
+    });
 
-    return res.status(200).json(logs);
+    return res.status(200).json(serialize(logs));
   } catch (error) {
     next(error);
   }

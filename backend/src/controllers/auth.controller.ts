@@ -1,9 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcrypt';
-import User from '../models/User.js';
+import prisma from '../lib/prisma.js';
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '../utils/jwt.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { sendMail } from '../utils/mailer.js';
+import { serialize } from '../utils/serialize.js';
 
 // Browsers drop a SameSite=None cookie that is not also Secure, which silently
 // breaks refresh-token rotation over plain http during local development.
@@ -26,42 +27,29 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
   try {
     const { fullName, email, phone, password } = req.body;
 
-    const existingUser = await User.findOne({ email });
+    const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
       throw new AppError('An account with this email address already exists. Try logging in instead.', 409);
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
-    const user = await User.create({
-      fullName,
-      email,
-      phone,
-      passwordHash,
-      role: 'owner', // Public registration always creates owner accounts
-      status: 'pending',
-      isActive: false
+    const user = await prisma.user.create({
+      data: {
+        fullName,
+        email,
+        phone,
+        passwordHash,
+        role: 'owner', // Public registration always creates owner accounts
+        status: 'pending',
+        isActive: false
+      }
     });
 
-    if (user.role === 'owner') {
-      return res.status(201).json({
-        message: 'Registration successful! Your profile is pending verification by our admin team. You will be notified once your account is approved and you can log in.',
-        pending: true,
-        user: {
-          id: user._id,
-          fullName: user.fullName,
-          email: user.email,
-          role: user.role,
-          status: user.status
-        }
-      });
-    }
-
-    // Fallback — should not reach here for public registration, but kept for safety
     return res.status(201).json({
-      message: 'Registration successful',
+      message: 'Registration successful! Your profile is pending verification by our admin team. You will be notified once your account is approved and you can log in.',
       pending: true,
       user: {
-        id: user._id,
+        id: user.id,
         fullName: user.fullName,
         email: user.email,
         role: user.role,
@@ -77,8 +65,8 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
   try {
     const { email, password } = req.body;
 
-    const user = await User.findOne({ email });
-    if (!user || !(await user.comparePassword(password))) {
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
       throw new AppError('Invalid email or password', 401);
     }
 
@@ -90,7 +78,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
       }
     }
 
-    const payload = { userId: (user._id as any).toString(), role: user.role };
+    const payload = { userId: user.id, role: user.role };
     const accessToken = generateAccessToken(payload);
     const refreshToken = generateRefreshToken(payload);
 
@@ -100,7 +88,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
       message: 'Login successful',
       accessToken,
       user: {
-        id: user._id,
+        id: user.id,
         fullName: user.fullName,
         email: user.email,
         role: user.role
@@ -120,7 +108,7 @@ export const refreshToken = async (req: Request, res: Response, next: NextFuncti
     }
 
     const decoded = verifyRefreshToken(refreshToken);
-    const user = await User.findById(decoded.userId);
+    const user = await prisma.user.findUnique({ where: { id: decoded.userId } });
     if (!user) {
       throw new AppError('User not found', 404);
     }
@@ -129,7 +117,7 @@ export const refreshToken = async (req: Request, res: Response, next: NextFuncti
       throw new AppError('Your account status does not permit this action.', 403);
     }
 
-    const payload = { userId: (user._id as any).toString(), role: user.role };
+    const payload = { userId: user.id, role: user.role };
     const accessToken = generateAccessToken(payload);
     const newRefreshToken = generateRefreshToken(payload);
 
@@ -138,7 +126,7 @@ export const refreshToken = async (req: Request, res: Response, next: NextFuncti
     return res.status(200).json({
       accessToken,
       user: {
-        id: user._id,
+        id: user.id,
         fullName: user.fullName,
         email: user.email,
         role: user.role
@@ -152,7 +140,7 @@ export const refreshToken = async (req: Request, res: Response, next: NextFuncti
 export const forgotPassword = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { email } = req.body;
-    const user = await User.findOne({ email });
+    const user = await prisma.user.findUnique({ where: { email } });
 
     // Always answer the same way: revealing whether an address is registered
     // lets an attacker enumerate accounts.
@@ -164,7 +152,7 @@ export const forgotPassword = async (req: Request, res: Response, next: NextFunc
       return res.status(200).json(genericResponse);
     }
 
-    const resetToken = jwtSignForReset((user._id as any).toString());
+    const resetToken = jwtSignForReset(user.id);
     const resetUrl = `${getFrontendUrl(req)}/reset-password?token=${resetToken}`;
 
     try {
@@ -204,13 +192,13 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
       throw new AppError('This password reset link is invalid or has expired.', 400);
     }
 
-    const user = await User.findById(decoded.userId);
+    const user = await prisma.user.findUnique({ where: { id: decoded.userId } });
     if (!user) {
       throw new AppError('Invalid reset token or user not found', 404);
     }
 
-    user.passwordHash = await bcrypt.hash(newPassword, 10);
-    await user.save();
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
 
     return res.status(200).json({ message: 'Password has been reset successfully.' });
   } catch (error) {
@@ -227,11 +215,12 @@ export const logout = async (req: Request, res: Response, next: NextFunction) =>
 
 export const getMe = async (req: any, res: Response, next: NextFunction) => {
   try {
-    const user = await User.findById(req.user.userId).select('-passwordHash');
+    const user = await prisma.user.findUnique({ where: { id: req.user.userId } });
     if (!user) {
       throw new AppError('User not found', 404);
     }
-    return res.status(200).json(user);
+    const { passwordHash, ...safeUser } = user;
+    return res.status(200).json(serialize(safeUser));
   } catch (error) {
     next(error);
   }
@@ -239,16 +228,16 @@ export const getMe = async (req: any, res: Response, next: NextFunction) => {
 
 export const getOwners = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const owners = await User.find({ role: 'owner' }).select('-passwordHash');
+    const owners = await prisma.user.findMany({ where: { role: 'owner' } });
     const mappedOwners = owners.map((owner) => ({
-      id: (owner._id as any).toString(),
+      id: owner.id,
       fullName: owner.fullName,
       email: owner.email,
       phone: owner.phone,
       role: owner.role,
       status: owner.status,
       isActive: owner.isActive,
-      createdAt: (owner as any).createdAt
+      createdAt: owner.createdAt
     }));
     return res.status(200).json(mappedOwners);
   } catch (error) {
@@ -269,24 +258,25 @@ export const updateOwnerStatus = async (req: Request, res: Response, next: NextF
       throw new AppError('Invalid status value. Must be approved or rejected.', 400);
     }
 
-    const owner = await User.findById(id);
+    const owner = await prisma.user.findUnique({ where: { id } });
     if (!owner || owner.role !== 'owner') {
       throw new AppError('Owner not found', 404);
     }
 
-    owner.status = status;
-    owner.isActive = (status === 'approved');
-    await owner.save();
+    const updated = await prisma.user.update({
+      where: { id },
+      data: { status, isActive: status === 'approved' }
+    });
 
     return res.status(200).json({
       message: `Owner account has been successfully ${status}.`,
       owner: {
-        id: owner._id,
-        fullName: owner.fullName,
-        email: owner.email,
-        role: owner.role,
-        status: owner.status,
-        isActive: owner.isActive
+        id: updated.id,
+        fullName: updated.fullName,
+        email: updated.email,
+        role: updated.role,
+        status: updated.status,
+        isActive: updated.isActive
       }
     });
   } catch (error) {
@@ -314,27 +304,29 @@ export const createUserByAdmin = async (req: any, res: Response, next: NextFunct
   try {
     const { fullName, email, phone, password, role } = req.body;
 
-    const existingUser = await User.findOne({ email });
+    const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
       throw new AppError('An account with this email address already exists.', 409);
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
     const targetRole = role || 'owner';
-    const user = await User.create({
-      fullName,
-      email,
-      phone,
-      passwordHash,
-      role: targetRole,
-      status: 'approved', // Admin-created accounts are approved immediately
-      isActive: true
+    const user = await prisma.user.create({
+      data: {
+        fullName,
+        email,
+        phone,
+        passwordHash,
+        role: targetRole,
+        status: 'approved', // Admin-created accounts are approved immediately
+        isActive: true
+      }
     });
 
     return res.status(201).json({
       message: `${targetRole === 'admin' ? 'Admin' : 'Owner'} account created successfully.`,
       user: {
-        id: user._id,
+        id: user.id,
         fullName: user.fullName,
         email: user.email,
         role: user.role,

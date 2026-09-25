@@ -1,0 +1,424 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ------------------------------------------------------------------ enums --
+
+enum UserRole {
+  admin
+  owner
+}
+
+enum UserStatus {
+  pending
+  approved
+  rejected
+}
+
+enum RoomType {
+  flat
+  pg
+}
+
+enum OccupancyStatus {
+  vacant
+  partially_occupied
+  fully_occupied
+}
+
+// Shared by Agreement.status and Tenant.agreementStatus.
+enum AgreementStatus {
+  pending
+  active
+  expired
+}
+
+enum TenantVerificationStatus {
+  pending
+  verified
+  failed
+}
+
+// Shared by Tenant.riskLevel, VerificationLog.riskLevel and MaintenanceRequest.priority.
+enum Severity {
+  low
+  medium
+  high
+}
+
+enum InviteStatus {
+  pending
+  accepted
+  expired
+}
+
+enum PaymentStatus {
+  paid
+  unpaid
+  overdue
+}
+
+enum PaymentMethod {
+  cash
+  upi
+  card
+  bank_transfer
+  none
+}
+
+enum MaintenanceStatus {
+  pending
+  in_progress
+  resolved
+}
+
+enum NotificationType {
+  payment
+  agreement
+  maintenance
+  system
+}
+
+enum MatchOperator {
+  and
+  or
+}
+
+enum VerificationOutcome {
+  verified
+  failed
+}
+
+// ----------------------------------------------------------------- models --
+
+model User {
+  id           String     @id @default(uuid()) @db.Uuid
+  fullName     String
+  email        String     @unique
+  phone        String
+  passwordHash String
+  role         UserRole   @default(owner)
+  isActive     Boolean    @default(true)
+  status       UserStatus @default(pending)
+  paidBeds     Int        @default(0)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  properties             Property[]
+  tenants                Tenant[]                @relation("TenantOwner")
+  tenantInvites          TenantInvite[]
+  tenantOwnerConnections TenantOwnerConnection[]
+  tenantReviews          TenantReview[]
+  expenses               Expense[]
+  notifications          Notification[]
+  verificationLogs       VerificationLog[]
+
+  @@map("users")
+}
+
+model Property {
+  id           String   @id @default(uuid()) @db.Uuid
+  propertyName String
+  address      Json     @default("{}")
+  description  String   @default("")
+  images       String[] @default([])
+  totalRooms   Int      @default(0)
+  ownerId      String   @db.Uuid
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  owner                 User                 @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  rooms                 Room[]
+  tenantsAssigned       Tenant[]             @relation("TenantAssignedProperty")
+  tenantInvitesAssigned TenantInvite[]       @relation("InviteAssignedProperty")
+  agreements            Agreement[]
+  payments              Payment[]
+  maintenanceRequests   MaintenanceRequest[]
+
+  @@map("properties")
+}
+
+model Room {
+  id               String          @id @default(uuid()) @db.Uuid
+  propertyId       String          @db.Uuid
+  roomNumber       String
+  roomType         RoomType        @default(pg)
+  bedCapacity      Int
+  occupancyStatus  OccupancyStatus @default(vacant)
+  monthlyRent      Float
+  agreementDocName String          @default("")
+  agreementDocData String          @default("") @db.Text
+  flatCategory     String?
+  propertyType     String[]        @default([])
+  preferredTenant  String[]        @default([])
+  furnishedType    String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  property              Property             @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  beds                  Bed[]
+  tenantsAssigned       Tenant[]             @relation("TenantAssignedRoom")
+  tenantInvitesAssigned TenantInvite[]       @relation("InviteAssignedRoom")
+  agreements            Agreement[]
+  payments              Payment[]
+  maintenanceRequests   MaintenanceRequest[]
+
+  @@unique([propertyId, roomNumber])
+  @@map("rooms")
+}
+
+model Bed {
+  id         String   @id @default(uuid()) @db.Uuid
+  roomId     String   @db.Uuid
+  bedNumber  String
+  tenantId   String?  @db.Uuid
+  isOccupied Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  room                  Room           @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  tenant                Tenant?        @relation("BedOccupant", fields: [tenantId], references: [id], onDelete: SetNull)
+  tenantsAssignedToBed  Tenant[]       @relation("TenantAssignedBed")
+  tenantInvitesAssigned TenantInvite[] @relation("InviteAssignedBed")
+
+  @@map("beds")
+}
+
+model Tenant {
+  id                    String                   @id @default(uuid()) @db.Uuid
+  fullName              String
+  aadhaarNumber         String
+  panNumber             String                   @default("")
+  email                 String                   @default("")
+  phone                 String
+  emergencyContact      String                   @default("")
+  occupation            String                   @default("")
+  address               String
+  agreementStatus       AgreementStatus          @default(pending)
+  verificationStatus    TenantVerificationStatus @default(pending)
+  tenantRating          Float                    @default(5)
+  creditScore           Int                      @default(700)
+  riskLevel             Severity                 @default(low)
+  previousOwnerFeedback String[]                 @default([])
+  documents             Json?
+  assignedPropertyId    String?                  @db.Uuid
+  assignedRoomId        String?                  @db.Uuid
+  assignedBedId         String?                  @db.Uuid
+  rentAmount            Float?
+  joiningDate           DateTime?
+  ownerId               String                   @db.Uuid
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+
+  owner                  User                     @relation("TenantOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  assignedProperty       Property?                @relation("TenantAssignedProperty", fields: [assignedPropertyId], references: [id], onDelete: SetNull)
+  assignedRoom           Room?                    @relation("TenantAssignedRoom", fields: [assignedRoomId], references: [id], onDelete: SetNull)
+  assignedBed            Bed?                     @relation("TenantAssignedBed", fields: [assignedBedId], references: [id], onDelete: SetNull)
+  occupiedBed            Bed[]                    @relation("BedOccupant")
+  additionalCharges      TenantAdditionalCharge[]
+  tenantOwnerConnections TenantOwnerConnection[]
+  tenantInvitesAccepted  TenantInvite[]           @relation("InviteAcceptedTenant")
+  agreements             Agreement[]
+  payments               Payment[]
+  maintenanceRequests    MaintenanceRequest[]
+
+  @@map("tenants")
+}
+
+model TenantAdditionalCharge {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @db.Uuid
+  description String
+  amount      Float
+  createdAt   DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_additional_charges")
+}
+
+model TenantInvite {
+  id                 String       @id @default(uuid()) @db.Uuid
+  ownerId            String       @db.Uuid
+  aadhaarNumber      String
+  panNumber          String       @default("")
+  email              String
+  tokenHash          String       @unique
+  status             InviteStatus @default(pending)
+  expiresAt          DateTime
+  assignedPropertyId String?      @db.Uuid
+  assignedRoomId     String?      @db.Uuid
+  assignedBedId      String?      @db.Uuid
+  joiningDate        DateTime?
+  acceptedTenantId   String?      @db.Uuid
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  owner            User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  assignedProperty Property? @relation("InviteAssignedProperty", fields: [assignedPropertyId], references: [id], onDelete: SetNull)
+  assignedRoom     Room?     @relation("InviteAssignedRoom", fields: [assignedRoomId], references: [id], onDelete: SetNull)
+  assignedBed      Bed?      @relation("InviteAssignedBed", fields: [assignedBedId], references: [id], onDelete: SetNull)
+  acceptedTenant   Tenant?   @relation("InviteAcceptedTenant", fields: [acceptedTenantId], references: [id], onDelete: SetNull)
+
+  @@map("tenant_invites")
+}
+
+model TenantOwnerConnection {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  ownerId   String   @db.Uuid
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  owner  User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, ownerId])
+  @@map("tenant_owner_connections")
+}
+
+model TenantReview {
+  id            String   @id @default(uuid()) @db.Uuid
+  aadhaarNumber String
+  tenantName    String
+  rating        Int
+  feedback      String   @db.Text
+  ownerId       String   @db.Uuid
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([aadhaarNumber])
+  @@map("tenant_reviews")
+}
+
+model Agreement {
+  id                 String          @id @default(uuid()) @db.Uuid
+  tenantId           String          @db.Uuid
+  propertyId         String          @db.Uuid
+  roomId             String          @db.Uuid
+  startDate          DateTime
+  endDate            DateTime
+  monthlyRent        Float
+  securityDeposit    Float
+  termsAndConditions String          @default("") @db.Text
+  additionalTerms    String          @default("") @db.Text
+  documentUrl        String          @default("")
+  status             AgreementStatus @default(pending)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  room     Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@map("agreements")
+}
+
+model Payment {
+  id            String        @id @default(uuid()) @db.Uuid
+  tenantId      String        @db.Uuid
+  propertyId    String?       @db.Uuid
+  roomId        String?       @db.Uuid
+  amount        Float
+  dueDate       DateTime
+  paymentDate   DateTime?
+  status        PaymentStatus @default(unpaid)
+  paymentMethod PaymentMethod @default(none)
+  transactionId String?
+  notes         String?       @db.Text
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  room     Room?     @relation(fields: [roomId], references: [id], onDelete: SetNull)
+
+  @@map("payments")
+}
+
+model Expense {
+  id          String   @id @default(uuid()) @db.Uuid
+  ownerId     String   @db.Uuid
+  date        DateTime
+  category    String
+  amount      Float
+  description String   @default("") @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@map("expenses")
+}
+
+model MaintenanceRequest {
+  id          String            @id @default(uuid()) @db.Uuid
+  propertyId  String            @db.Uuid
+  roomId      String            @db.Uuid
+  tenantId    String            @db.Uuid
+  title       String
+  description String            @db.Text
+  priority    Severity          @default(medium)
+  status      MaintenanceStatus @default(pending)
+  images      String[]          @default([])
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  room     Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("maintenance_requests")
+}
+
+model Notification {
+  id          String           @id @default(uuid()) @db.Uuid
+  recipientId String           @db.Uuid
+  title       String
+  message     String           @db.Text
+  type        NotificationType @default(system)
+  isRead      Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  recipient User @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model Setting {
+  id          String   @id @default(uuid()) @db.Uuid
+  key         String   @unique
+  value       String   @db.Text
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("settings")
+}
+
+model VerificationLog {
+  id             String              @id @default(uuid()) @db.Uuid
+  aadhaarNumber  String              @default("")
+  searchCriteria Json                @default("{}")
+  operator       MatchOperator       @default(or)
+  requesterId    String              @db.Uuid
+  timestamp      DateTime            @default(now())
+  result         Json
+  riskLevel      Severity            @default(low)
+  status         VerificationOutcome @default(verified)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  requester User @relation(fields: [requesterId], references: [id], onDelete: Cascade)
+
+  @@map("verification_logs")
+}

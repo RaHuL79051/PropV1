@@ -1,17 +1,7 @@
 import { Response, NextFunction } from 'express';
-import mongoose from 'mongoose';
-import Property from '../models/Property.js';
-import Room from '../models/Room.js';
-import Bed from '../models/Bed.js';
-import Tenant from '../models/Tenant.js';
-import Agreement from '../models/Agreement.js';
-import Payment from '../models/Payment.js';
-import User from '../models/User.js';
-import VerificationLog from '../models/VerificationLog.js';
-import TenantOwnerConnection from '../models/TenantOwnerConnection.js';
-import MaintenanceRequest from '../models/MaintenanceRequest.js';
+import prisma from '../lib/prisma.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
-import Expense from '../models/Expense.js';
+import { serialize } from '../utils/serialize.js';
 
 export const getOwnerDashboardStats = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
@@ -23,13 +13,13 @@ export const getOwnerDashboardStats = async (req: AuthenticatedRequest, res: Res
 
     // 1. Total Properties, connections, and expenses in parallel
     const [properties, tenantConnections, expenses] = await Promise.all([
-      Property.find({ owner: ownerId }),
-      TenantOwnerConnection.find({ owner: ownerId, isDeleted: false }).select('tenant'),
-      Expense.find({ owner: ownerId })
+      prisma.property.findMany({ where: { ownerId } }),
+      prisma.tenantOwnerConnection.findMany({ where: { ownerId, isDeleted: false }, select: { tenantId: true } }),
+      prisma.expense.findMany({ where: { ownerId } })
     ]);
 
-    const propertyIds = properties.map(p => p._id);
-    const tenantIdList = tenantConnections.map(c => c.tenant);
+    const propertyIds = properties.map((p) => p.id);
+    const tenantIdList = tenantConnections.map((c) => c.tenantId);
     const totalProperties = properties.length;
 
     // 2. Fetch rooms, active tenants, agreements, payments, maintenance requests, and feeds in parallel
@@ -44,34 +34,42 @@ export const getOwnerDashboardStats = async (req: AuthenticatedRequest, res: Res
       recentPayments,
       recentMaintenance
     ] = await Promise.all([
-      Room.find({ property: { $in: propertyIds } }),
-      Tenant.countDocuments({ _id: { $in: tenantIdList }, assignedBed: { $ne: null } }),
-      Agreement.countDocuments({ tenant: { $in: tenantIdList }, status: 'pending' }),
-      Agreement.countDocuments({ tenant: { $in: tenantIdList }, status: 'active' }),
-      Payment.find({ tenant: { $in: tenantIdList }, status: 'paid' }),
-      Payment.find({ tenant: { $in: tenantIdList }, status: { $in: ['unpaid', 'overdue'] } }),
-      MaintenanceRequest.find({ property: { $in: propertyIds } }),
-      Payment.find({ tenant: { $in: tenantIdList } })
-        .populate('tenant', 'fullName phone')
-        .populate('property', 'propertyName')
-        .populate('room', 'roomNumber')
-        .sort({ dueDate: -1 })
-        .limit(5),
-      MaintenanceRequest.find({ property: { $in: propertyIds } })
-        .populate('tenant', 'fullName')
-        .populate('property', 'propertyName')
-        .populate('room', 'roomNumber')
-        .sort({ createdAt: -1 })
-        .limit(5)
+      prisma.room.findMany({ where: { propertyId: { in: propertyIds } } }),
+      prisma.tenant.count({ where: { id: { in: tenantIdList }, assignedBedId: { not: null } } }),
+      prisma.agreement.count({ where: { tenantId: { in: tenantIdList }, status: 'pending' } }),
+      prisma.agreement.count({ where: { tenantId: { in: tenantIdList }, status: 'active' } }),
+      prisma.payment.findMany({ where: { tenantId: { in: tenantIdList }, status: 'paid' } }),
+      prisma.payment.findMany({ where: { tenantId: { in: tenantIdList }, status: { in: ['unpaid', 'overdue'] } } }),
+      prisma.maintenanceRequest.findMany({ where: { propertyId: { in: propertyIds } } }),
+      prisma.payment.findMany({
+        where: { tenantId: { in: tenantIdList } },
+        include: {
+          tenant: { select: { id: true, fullName: true, phone: true } },
+          property: { select: { id: true, propertyName: true } },
+          room: { select: { id: true, roomNumber: true } }
+        },
+        orderBy: { dueDate: 'desc' },
+        take: 5
+      }),
+      prisma.maintenanceRequest.findMany({
+        where: { propertyId: { in: propertyIds } },
+        include: {
+          tenant: { select: { id: true, fullName: true } },
+          property: { select: { id: true, propertyName: true } },
+          room: { select: { id: true, roomNumber: true } }
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 5
+      })
     ]);
 
     const totalRooms = rooms.length;
-    const roomIds = rooms.map(r => r._id);
+    const roomIds = rooms.map((r) => r.id);
 
     // 3. Fetch beds based on room ids
-    const beds = await Bed.find({ room: { $in: roomIds } });
+    const beds = await prisma.bed.findMany({ where: { roomId: { in: roomIds } } });
     const totalBeds = beds.length;
-    const occupiedBeds = beds.filter(b => b.isOccupied).length;
+    const occupiedBeds = beds.filter((b) => b.isOccupied).length;
     const vacantBeds = totalBeds - occupiedBeds;
 
     // 4. Calculations
@@ -84,7 +82,7 @@ export const getOwnerDashboardStats = async (req: AuthenticatedRequest, res: Res
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
 
     const monthlyRevenue = paidPayments
-      .filter(p => {
+      .filter((p) => {
         if (!p.paymentDate) return false;
         const pDate = new Date(p.paymentDate);
         return pDate >= startOfMonth && pDate <= endOfMonth;
@@ -92,7 +90,7 @@ export const getOwnerDashboardStats = async (req: AuthenticatedRequest, res: Res
       .reduce((sum, p) => sum + p.amount, 0);
 
     const monthlyExpenses = expenses
-      .filter(e => {
+      .filter((e) => {
         if (!e.date) return false;
         const eDate = new Date(e.date);
         return eDate >= startOfMonth && eDate <= endOfMonth;
@@ -102,15 +100,15 @@ export const getOwnerDashboardStats = async (req: AuthenticatedRequest, res: Res
     const pendingPaymentsCount = pendingPayments.length;
     const pendingPaymentsAmount = pendingPayments.reduce((sum, p) => sum + p.amount, 0);
 
-    const pendingMaintenanceCount = maintenanceRequests.filter(r => r.status === 'pending' || r.status === 'in_progress').length;
+    const pendingMaintenanceCount = maintenanceRequests.filter((r) => r.status === 'pending' || r.status === 'in_progress').length;
     const totalMaintenanceCount = maintenanceRequests.length;
 
     // 5. Expense Category Breakdown
     const categoryTotals: { [key: string]: number } = {};
-    expenses.forEach(e => {
+    expenses.forEach((e) => {
       categoryTotals[e.category] = (categoryTotals[e.category] || 0) + e.amount;
     });
-    const expenseBreakdown = Object.keys(categoryTotals).map(cat => ({
+    const expenseBreakdown = Object.keys(categoryTotals).map((cat) => ({
       category: cat,
       amount: categoryTotals[cat]
     }));
@@ -118,7 +116,7 @@ export const getOwnerDashboardStats = async (req: AuthenticatedRequest, res: Res
     // 6. Real Analytics Chart (Last 6 Months Revenue vs Expenses vs Profit) calculated in memory
     const monthlyChartData = [];
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    
+
     for (let i = 5; i >= 0; i--) {
       const d = new Date();
       d.setDate(1);
@@ -131,7 +129,7 @@ export const getOwnerDashboardStats = async (req: AuthenticatedRequest, res: Res
       const endOfM = new Date(year, monthIndex + 1, 0, 23, 59, 59, 999);
 
       const rev = paidPayments
-        .filter(p => {
+        .filter((p) => {
           if (!p.paymentDate) return false;
           const pDate = new Date(p.paymentDate);
           return pDate >= startOfM && pDate <= endOfM;
@@ -139,7 +137,7 @@ export const getOwnerDashboardStats = async (req: AuthenticatedRequest, res: Res
         .reduce((sum, p) => sum + p.amount, 0);
 
       const exp = expenses
-        .filter(e => {
+        .filter((e) => {
           if (!e.date) return false;
           const eDate = new Date(e.date);
           return eDate >= startOfM && eDate <= endOfM;
@@ -175,8 +173,8 @@ export const getOwnerDashboardStats = async (req: AuthenticatedRequest, res: Res
       pendingMaintenanceCount,
       totalMaintenanceCount,
       expenseBreakdown,
-      recentPayments,
-      recentMaintenance
+      recentPayments: serialize(recentPayments),
+      recentMaintenance: serialize(recentMaintenance)
     });
   } catch (error) {
     next(error);
@@ -204,32 +202,37 @@ export const getAdminDashboardStats = async (req: AuthenticatedRequest, res: Res
       recentProperties,
       recentMaintenance
     ] = await Promise.all([
-      User.countDocuments({ role: 'owner' }),
-      Property.countDocuments(),
-      Room.countDocuments(),
-      Bed.countDocuments(),
-      Bed.countDocuments({ isOccupied: true }),
-      Tenant.countDocuments({ assignedBed: { $ne: null } }),
-      Agreement.countDocuments({ status: 'active' }),
-      Payment.find({ status: 'paid' }),
-      Expense.find(),
-      VerificationLog.countDocuments({ riskLevel: 'high' }),
-      VerificationLog.find()
-        .populate('requester', 'fullName email')
-        .sort({ createdAt: -1 })
-        .limit(6),
-      MaintenanceRequest.countDocuments(),
-      MaintenanceRequest.countDocuments({ status: { $in: ['pending', 'in_progress'] } }),
-      Payment.find({ status: { $in: ['unpaid', 'overdue'] } }),
-      Property.find()
-        .populate('owner', 'fullName email')
-        .sort({ createdAt: -1 })
-        .limit(5),
-      MaintenanceRequest.find()
-        .populate('tenant', 'fullName')
-        .populate('property', 'propertyName')
-        .sort({ createdAt: -1 })
-        .limit(5)
+      prisma.user.count({ where: { role: 'owner' } }),
+      prisma.property.count(),
+      prisma.room.count(),
+      prisma.bed.count(),
+      prisma.bed.count({ where: { isOccupied: true } }),
+      prisma.tenant.count({ where: { assignedBedId: { not: null } } }),
+      prisma.agreement.count({ where: { status: 'active' } }),
+      prisma.payment.findMany({ where: { status: 'paid' } }),
+      prisma.expense.findMany(),
+      prisma.verificationLog.count({ where: { riskLevel: 'high' } }),
+      prisma.verificationLog.findMany({
+        include: { requester: { select: { id: true, fullName: true, email: true } } },
+        orderBy: { createdAt: 'desc' },
+        take: 6
+      }),
+      prisma.maintenanceRequest.count(),
+      prisma.maintenanceRequest.count({ where: { status: { in: ['pending', 'in_progress'] } } }),
+      prisma.payment.findMany({ where: { status: { in: ['unpaid', 'overdue'] } } }),
+      prisma.property.findMany({
+        include: { owner: { select: { id: true, fullName: true, email: true } } },
+        orderBy: { createdAt: 'desc' },
+        take: 5
+      }),
+      prisma.maintenanceRequest.findMany({
+        include: {
+          tenant: { select: { id: true, fullName: true } },
+          property: { select: { id: true, propertyName: true } }
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 5
+      })
     ]);
 
     // Total Revenue Platform Wide
@@ -245,7 +248,7 @@ export const getAdminDashboardStats = async (req: AuthenticatedRequest, res: Res
     // Real monthly chart data platform-wide (last 6 months) calculated in memory
     const monthlyChartData = [];
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    
+
     for (let i = 5; i >= 0; i--) {
       const d = new Date();
       d.setDate(1);
@@ -258,7 +261,7 @@ export const getAdminDashboardStats = async (req: AuthenticatedRequest, res: Res
       const endOfM = new Date(year, monthIndex + 1, 0, 23, 59, 59, 999);
 
       const rev = allPaidPayments
-        .filter(p => {
+        .filter((p) => {
           if (!p.paymentDate) return false;
           const pDate = new Date(p.paymentDate);
           return pDate >= startOfM && pDate <= endOfM;
@@ -266,7 +269,7 @@ export const getAdminDashboardStats = async (req: AuthenticatedRequest, res: Res
         .reduce((sum, p) => sum + p.amount, 0);
 
       const exp = allExpenses
-        .filter(e => {
+        .filter((e) => {
           if (!e.date) return false;
           const eDate = new Date(e.date);
           return eDate >= startOfM && eDate <= endOfM;
@@ -293,17 +296,16 @@ export const getAdminDashboardStats = async (req: AuthenticatedRequest, res: Res
       totalExpenses,
       netProfit: totalRevenue - totalExpenses,
       fraudAlerts,
-      recentLogs,
+      recentLogs: serialize(recentLogs),
       monthlyChartData,
       totalMaintenance,
       pendingMaintenance,
       pendingPaymentsCount,
       pendingPaymentsAmount,
-      recentProperties,
-      recentMaintenance
+      recentProperties: serialize(recentProperties),
+      recentMaintenance: serialize(recentMaintenance)
     });
   } catch (error) {
     next(error);
   }
 };
-

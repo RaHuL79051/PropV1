@@ -1,7 +1,8 @@
 import { Response, NextFunction } from 'express';
-import Expense from '../models/Expense.js';
+import prisma from '../lib/prisma.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
+import { serialize } from '../utils/serialize.js';
 
 export const createExpense = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
@@ -12,17 +13,19 @@ export const createExpense = async (req: AuthenticatedRequest, res: Response, ne
       throw new AppError('Authentication required', 401);
     }
 
-    const expense = await Expense.create({
-      owner: ownerId,
-      date: new Date(date),
-      category,
-      amount,
-      description: description || ''
+    const expense = await prisma.expense.create({
+      data: {
+        ownerId,
+        date: new Date(date),
+        category,
+        amount,
+        description: description || ''
+      }
     });
 
     return res.status(201).json({
       message: 'Expense added successfully',
-      expense
+      expense: serialize(expense)
     });
   } catch (error) {
     next(error);
@@ -38,10 +41,10 @@ export const getExpenses = async (req: AuthenticatedRequest, res: Response, next
       throw new AppError('Authentication required', 401);
     }
 
-    const query: any = { owner: ownerId };
+    const where: any = { ownerId };
 
     if (category) {
-      query.category = category;
+      where.category = category;
     }
 
     // Apply date filters
@@ -50,32 +53,32 @@ export const getExpenses = async (req: AuthenticatedRequest, res: Response, next
       if (range === 'daily') {
         const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-        query.date = { $gte: startOfDay, $lte: endOfDay };
+        where.date = { gte: startOfDay, lte: endOfDay };
       } else if (range === 'weekly') {
         // Last 7 days
         const sevenDaysAgo = new Date(now);
         sevenDaysAgo.setDate(now.getDate() - 7);
         sevenDaysAgo.setHours(0, 0, 0, 0);
-        query.date = { $gte: sevenDaysAgo, $lte: now };
+        where.date = { gte: sevenDaysAgo, lte: now };
       } else if (range === 'monthly') {
         // Current calendar month
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
         startOfMonth.setHours(0, 0, 0, 0);
-        query.date = { $gte: startOfMonth, $lte: now };
+        where.date = { gte: startOfMonth, lte: now };
       }
     } else if (startDate && endDate) {
       const start = new Date(startDate as string);
       start.setHours(0, 0, 0, 0);
       const end = new Date(endDate as string);
       end.setHours(23, 59, 59, 999);
-      query.date = { $gte: start, $lte: end };
+      where.date = { gte: start, lte: end };
     }
 
-    const expenses = await Expense.find(query).sort({ date: -1 });
+    const expenses = await prisma.expense.findMany({ where, orderBy: { date: 'desc' } });
     const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
 
     return res.status(200).json({
-      expenses,
+      expenses: serialize(expenses),
       totalExpenses
     });
   } catch (error) {
@@ -92,16 +95,16 @@ export const deleteExpense = async (req: AuthenticatedRequest, res: Response, ne
       throw new AppError('Authentication required', 401);
     }
 
-    const expense = await Expense.findById(id);
+    const expense = await prisma.expense.findUnique({ where: { id } });
     if (!expense) {
       throw new AppError('Expense not found', 404);
     }
 
-    if (expense.owner.toString() !== ownerId && req.user?.role !== 'admin') {
+    if (expense.ownerId !== ownerId && req.user?.role !== 'admin') {
       throw new AppError('You can only delete your own expenses.', 403);
     }
 
-    await Expense.findByIdAndDelete(id);
+    await prisma.expense.delete({ where: { id } });
 
     return res.status(200).json({
       message: 'Expense deleted successfully'
