@@ -1,6 +1,9 @@
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // Migrations use a direct (non-pooled) connection because pgBouncer's
+  // transaction mode cannot hold the session-level state migrations need.
+  directUrl = env("DIRECT_URL")
 }
 
 generator client {
