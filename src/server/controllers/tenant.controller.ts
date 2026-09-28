@@ -1154,8 +1154,7 @@ export const updateRoomOccupancy = async (roomId: string) => {
       occupancyStatus = 'partially_occupied';
     }
   } else {
-    const totalBeds = await prisma.bed.findMany({ where: { roomId } });
-    const occupiedBedsCount = totalBeds.filter((b) => b.isOccupied).length;
+    const occupiedBedsCount = await prisma.bed.count({ where: { roomId, isOccupied: true } });
 
     if (occupiedBedsCount === 0) {
       occupancyStatus = 'vacant';

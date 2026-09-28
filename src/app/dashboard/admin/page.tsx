@@ -32,7 +32,7 @@ interface AdminStats {
   recentProperties: Array<{
     _id: string;
     propertyName: string;
-    address: string;
+    fullAddress?: string;
     owner?: { fullName: string; email: string };
     createdAt: string;
   }>;
@@ -392,7 +392,7 @@ export default function AdminDashboardPage() {
                 <div key={p._id} className="flex justify-between items-center p-3 rounded-xl border border-slate-50 dark:border-slate-850 bg-slate-55/50 dark:bg-slate-950/20 text-xs">
                   <div>
                     <div className="font-bold text-slate-900 dark:text-white">{p.propertyName}</div>
-                    <div className="text-[10px] text-slate-400">{p.address}</div>
+                    <div className="text-[10px] text-slate-400">{p.fullAddress || 'N/A'}</div>
                   </div>
                   <div className="text-right">
                     <div className="font-semibold text-slate-700 dark:text-slate-300">{p.owner?.fullName || 'Unknown Owner'}</div>
